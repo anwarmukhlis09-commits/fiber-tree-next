@@ -224,26 +224,28 @@ export default function Home() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">
-      <header className="bg-white border-b border-slate-200 px-8 py-4 flex justify-between items-center z-10 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="bg-success/10 p-2 rounded-lg text-success">
-            <Network className="w-6 h-6" />
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center z-10 shadow-sm">
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="bg-success/10 p-1.5 md:p-2 rounded-lg text-success">
+            <Network className="w-5 h-5 md:w-6 md:h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800 leading-none">Fiber Optic Calculator</h1>
-            <p className="text-sm text-slate-500 mt-1">Tree Topology Designer</p>
+            <h1 className="text-base md:text-xl font-bold text-slate-800 leading-none">Fiber Optic Calculator</h1>
+            <p className="text-[10px] md:text-sm text-slate-500 mt-0.5 md:mt-1">Tree Topology Designer</p>
           </div>
         </div>
         <button 
           onClick={handleReset}
-          className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm"
+          className="flex items-center gap-1.5 md:gap-2 bg-white border border-slate-200 px-3 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm text-sm"
         >
-          <RotateCcw className="w-4 h-4" />
-          Reset
+          <RotateCcw className="w-3.5 h-3.5 md:w-4 md:h-4" />
+          <span className="hidden sm:inline">Reset</span>
         </button>
       </header>
 
-      <main className="flex-1 relative overflow-auto p-12 flex justify-center scroll-smooth">
+      {/* Main Canvas */}
+      <main className="flex-1 relative overflow-auto p-4 md:p-12 flex justify-center scroll-smooth">
         <div 
           ref={canvasRef}
           className="relative min-w-full min-h-full origin-top transition-transform duration-100 ease-out"
@@ -258,35 +260,37 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="fixed right-6 top-24 flex flex-col gap-3 z-20">
-          <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="w-12 h-12 bg-white border border-slate-200 rounded-xl flex items-center justify-center shadow-lg hover:text-primary transition-all">
-            <Plus className="w-5 h-5" />
+        {/* Zoom Controls */}
+        <div className="fixed right-3 md:right-6 top-20 md:top-24 flex flex-col gap-2 md:gap-3 z-20">
+          <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="w-10 h-10 md:w-12 md:h-12 bg-white border border-slate-200 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg hover:text-primary transition-all">
+            <Plus className="w-4 h-4 md:w-5 md:h-5" />
           </button>
-          <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="w-12 h-12 bg-white border border-slate-200 rounded-xl flex items-center justify-center shadow-lg hover:text-primary transition-all">
-            <Minus className="w-5 h-5" />
+          <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="w-10 h-10 md:w-12 md:h-12 bg-white border border-slate-200 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg hover:text-primary transition-all">
+            <Minus className="w-4 h-4 md:w-5 md:h-5" />
           </button>
-          <button onClick={() => setZoom(1)} className="w-12 h-12 bg-white border border-slate-200 rounded-xl flex items-center justify-center shadow-lg hover:text-primary transition-all">
-            <Maximize className="w-5 h-5" />
+          <button onClick={() => setZoom(1)} className="w-10 h-10 md:w-12 md:h-12 bg-white border border-slate-200 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg hover:text-primary transition-all">
+            <Maximize className="w-4 h-4 md:w-5 md:h-5" />
           </button>
         </div>
       </main>
 
-      <footer className="bg-white border-t border-slate-200 p-6 z-10">
-        <div className="max-w-5xl mx-auto flex flex-col gap-6">
-          <div className="flex justify-around items-center gap-4">
+      {/* Summary Panel */}
+      <footer className="bg-white border-t border-slate-200 p-4 md:p-6 z-10">
+        <div className="max-w-5xl mx-auto flex flex-col gap-4 md:gap-6">
+          <div className="grid grid-cols-2 md:flex md:justify-around items-center gap-3 md:gap-4">
             <SummaryCard Icon={Zap} title="TX Power" value={`${treeData.power} dBm`} />
-            <SummaryCard Icon={MapPin} title="Max Distance" value={`${summaryData.totalDist.toFixed(1)} km`} />
-            <SummaryCard Icon={GitBranch} title="Total Splitters" value={summaryData.totalSplitters} />
-            <SummaryCard Icon={Activity} title="Worst Loss" value={`${summaryData.worstPower.toFixed(1)} dBm`} />
+            <SummaryCard Icon={MapPin} title="Max Dist" value={`${summaryData.totalDist.toFixed(1)} km`} />
+            <SummaryCard Icon={GitBranch} title="Splitters" value={summaryData.totalSplitters} />
+            <SummaryCard Icon={Activity} title="Worst" value={`${summaryData.worstPower.toFixed(1)} dBm`} />
           </div>
           
-          <div className="px-4">
-            <div className="flex justify-between items-end mb-2 text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <div className="px-1 md:px-4">
+            <div className="flex justify-between items-end mb-1 md:mb-2 text-[8px] md:text-xs font-bold text-slate-400 uppercase tracking-wider">
               <span>-35 dBm</span>
-              <span className="text-slate-800 text-sm">Worst Link: {summaryData.worstPower.toFixed(1)} dBm</span>
+              <span className="text-slate-800 text-[10px] md:text-sm">Worst Link: {summaryData.worstPower.toFixed(1)} dBm</span>
               <span>10 dBm</span>
             </div>
-            <div className="h-3 bg-slate-100 rounded-full overflow-hidden p-0.5">
+            <div className="h-2 md:h-3 bg-slate-100 rounded-full overflow-hidden p-0.5">
               <div 
                 className={`h-full rounded-full transition-all duration-500 ${
                   summaryData.worstPower > -20 ? 'bg-success' : summaryData.worstPower > -27 ? 'bg-warning' : 'bg-danger'
@@ -298,11 +302,12 @@ export default function Home() {
         </div>
       </footer>
 
+      {/* Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-slate-800">
+          <div className="bg-white w-full max-w-md rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
+            <div className="flex justify-between items-center mb-4 md:mb-6">
+              <h2 className="text-xl md:text-2xl font-bold text-slate-800">
                 {editingNode?.type === 'olt' ? 'Transmitter Config' : 'Splitter Config'}
               </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
@@ -310,35 +315,35 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="space-y-5">
+            <div className="space-y-4 md:space-y-5">
               <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-2">Node Name</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Node Name</label>
                 <input 
                   type="text" 
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary transition-colors"
+                  className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary transition-colors"
                 />
               </div>
 
               {editingNode?.type === 'olt' && (
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-2">Power Output (dBm)</label>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Power Output (dBm)</label>
                   <input 
                     type="number" 
                     value={formData.power}
                     onChange={e => setFormData({...formData, power: parseFloat(e.target.value)})}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
+                    className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary"
                   />
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-2">Splitter Ratio</label>
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Splitter Ratio</label>
                 <select 
                   value={formData.ratio}
                   onChange={e => setFormData({...formData, ratio: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
+                  className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary"
                 >
                   <option value="1">No Splitter (1:1)</option>
                   <option value="2">1:2 (-3.5 dB)</option>
@@ -352,11 +357,11 @@ export default function Home() {
 
               {formData.ratio === 'unbalanced' && (
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-2">Unbalanced Ratio (%)</label>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Unbalanced Ratio (%)</label>
                   <select 
                     value={formData.percentage}
                     onChange={e => setFormData({...formData, percentage: parseInt(e.target.value)})}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
+                    className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary"
                   >
                     {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50].map(p => (
                       <option key={p} value={p}>{p < 10 ? `0${p}` : p}:{100-p}</option>
@@ -367,36 +372,37 @@ export default function Home() {
 
               {editingNode?.type !== 'olt' && (
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-2">Distance from Parent (km)</label>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Distance from Parent (km)</label>
                   <input 
                     type="number" 
                     value={formData.distance}
                     onChange={e => setFormData({...formData, distance: parseFloat(e.target.value)})}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
+                    className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary"
                   />
-                  <p className="text-xs text-slate-400 mt-1">Cable Loss: -{(formData.distance * LOSS_PER_KM).toFixed(2)} dB</p>
+                  <p className="text-[10px] md:text-xs text-slate-400 mt-1">Cable Loss: -{(formData.distance * LOSS_PER_KM).toFixed(2)} dB</p>
                 </div>
               )}
             </div>
 
-            <div className="flex gap-4 mt-8">
+            <div className="flex gap-2 md:gap-4 mt-6 md:mt-8">
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors"
+                className="flex-1 px-4 md:px-6 py-2.5 md:py-3 bg-slate-100 text-slate-600 font-bold rounded-lg md:rounded-xl hover:bg-slate-200 transition-colors text-sm md:text-base"
               >
                 Cancel
               </button>
               {editingNode?.type !== 'olt' && (
                 <button 
                   onClick={deleteNode}
-                  className="px-6 py-3 bg-danger/10 text-danger font-bold rounded-xl hover:bg-danger/20 transition-colors"
+                  className="px-4 md:px-6 py-2.5 md:py-3 bg-danger/10 text-danger font-bold rounded-lg md:rounded-xl hover:bg-danger/20 transition-colors text-sm md:text-base"
                 >
-                  Delete
+                  <span className="md:hidden"><X className="w-5 h-5"/></span>
+                  <span className="hidden md:inline">Delete</span>
                 </button>
               )}
               <button 
                 onClick={saveNode}
-                className="flex-1 px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20"
+                className="flex-1 px-4 md:px-6 py-2.5 md:py-3 bg-primary text-white font-bold rounded-lg md:rounded-xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20 text-sm md:text-base"
               >
                 Save
               </button>
@@ -410,13 +416,13 @@ export default function Home() {
 
 function SummaryCard({ Icon, title, value }: { Icon: LucideIcon, title: string, value: any }) {
   return (
-    <div className="flex items-center gap-4">
-      <div className="p-3 bg-slate-50 rounded-2xl text-primary border border-slate-100">
-        <Icon className="w-5 h-5" />
+    <div className="flex items-center gap-2 md:gap-4">
+      <div className="p-2 md:p-3 bg-slate-50 rounded-lg md:rounded-2xl text-primary border border-slate-100">
+        <Icon className="w-4 h-4 md:w-5 md:h-5" />
       </div>
       <div>
-        <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{title}</h4>
-        <p className="text-lg font-extrabold text-slate-800">{value}</p>
+        <h4 className="text-[8px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider">{title}</h4>
+        <p className="text-sm md:text-lg font-extrabold text-slate-800">{value}</p>
       </div>
     </div>
   );

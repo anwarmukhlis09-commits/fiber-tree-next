@@ -30,9 +30,16 @@ body {
 /* Tree Layout */
 .tree-children {
   display: flex;
-  gap: 3rem;
-  margin-top: 5rem;
+  gap: 1.5rem;
+  margin-top: 3rem;
   justify-content: center;
+}
+
+@media (min-width: 768px) {
+  .tree-children {
+    gap: 3rem;
+    margin-top: 5rem;
+  }
 }
 
 .node-container {
