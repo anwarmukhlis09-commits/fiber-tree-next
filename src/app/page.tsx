@@ -275,24 +275,22 @@ export default function Home() {
       </main>
 
       {/* Summary Panel */}
-      <footer className="bg-white border-t border-slate-200 p-3 md:p-6 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <div className="max-w-5xl mx-auto flex flex-col gap-3 md:gap-6">
-          {/* Summary Cards Grid */}
-          <div className="grid grid-cols-2 lg:flex lg:justify-around items-stretch gap-2 md:gap-4">
+      <footer className="bg-white border-t border-slate-200 p-4 md:p-6 pb-8 md:pb-10 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="max-w-5xl mx-auto flex flex-col gap-4 md:gap-6">
+          <div className="grid grid-cols-2 lg:flex lg:justify-around items-stretch gap-2.5 md:gap-4">
             <SummaryCard Icon={Zap} title="TX Power" value={`${treeData.power}`} unit="dBm" color="text-amber-500" />
             <SummaryCard Icon={MapPin} title="Max Distance" value={`${summaryData.totalDist.toFixed(1)}`} unit="km" color="text-blue-500" />
             <SummaryCard Icon={GitBranch} title="Splitters" value={`${summaryData.totalSplitters}`} unit="pcs" color="text-indigo-500" />
             <SummaryCard Icon={Activity} title="Worst Loss" value={`${summaryData.worstPower.toFixed(1)}`} unit="dBm" color={summaryData.worstPower > -20 ? 'text-success' : summaryData.worstPower > -27 ? 'text-warning' : 'text-danger'} />
           </div>
           
-          {/* Power Bar */}
           <div className="px-1 md:px-2 mt-1">
-            <div className="flex justify-between items-center mb-1 text-[8px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">
+            <div className="flex justify-between items-center mb-1.5 text-[8px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">
               <span>Low Signal (-35)</span>
               <span className="text-slate-800 font-extrabold bg-slate-100 px-2 py-0.5 rounded-full">Worst: {summaryData.worstPower.toFixed(1)} dBm</span>
               <span>High Signal (10)</span>
             </div>
-            <div className="h-1.5 md:h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-2 md:h-2.5 bg-slate-100 rounded-full overflow-hidden">
               <div 
                 className={`h-full transition-all duration-700 ease-out ${
                   summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_8px_rgba(250,204,21,0.5)]' : 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.5)]'
@@ -389,14 +387,14 @@ export default function Home() {
             <div className="flex gap-2 md:gap-4 mt-6 md:mt-8">
               <button 
                 onClick={() => setIsModalOpen(false)}
-                className="flex-1 px-4 md:px-6 py-2.5 md:py-3 bg-slate-100 text-slate-600 font-bold rounded-lg md:rounded-xl hover:bg-slate-200 transition-colors text-sm md:text-base"
+                className="flex-1 px-4 md:px-6 py-2.5 md:py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors text-sm md:text-base"
               >
                 Cancel
               </button>
               {editingNode?.type !== 'olt' && (
                 <button 
                   onClick={deleteNode}
-                  className="px-4 md:px-6 py-2.5 md:py-3 bg-danger/10 text-danger font-bold rounded-lg md:rounded-xl hover:bg-danger/20 transition-colors text-sm md:text-base"
+                  className="px-4 md:px-6 py-2.5 md:py-3 bg-danger/10 text-danger font-bold rounded-xl hover:bg-danger/20 transition-colors text-sm md:text-base"
                 >
                   <span className="md:hidden"><X className="w-5 h-5"/></span>
                   <span className="hidden md:inline">Delete</span>
@@ -404,7 +402,7 @@ export default function Home() {
               )}
               <button 
                 onClick={saveNode}
-                className="flex-1 px-4 md:px-6 py-2.5 md:py-3 bg-primary text-white font-bold rounded-lg md:rounded-xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20 text-sm md:text-base"
+                className="flex-1 px-4 md:px-6 py-2.5 md:py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20 text-sm md:text-base"
               >
                 Save
               </button>
@@ -418,8 +416,8 @@ export default function Home() {
 
 function SummaryCard({ Icon, title, value, unit, color }: { Icon: LucideIcon, title: string, value: string, unit: string, color: string }) {
   return (
-    <div className="bg-slate-50/80 border border-slate-100 rounded-xl md:rounded-2xl p-2.5 md:p-4 flex items-center gap-2.5 md:gap-4 shadow-sm">
-      <div className={`p-2 md:p-3 bg-white rounded-lg md:rounded-xl shadow-sm ${color}`}>
+    <div className="bg-slate-50/80 border border-slate-100 rounded-xl md:rounded-2xl p-2.5 md:p-4 flex items-center gap-3 md:gap-4 shadow-sm">
+      <div className={`p-2.5 md:p-3 bg-white rounded-lg md:rounded-xl shadow-sm ${color}`}>
         <Icon className="w-4 h-4 md:w-6 md:h-6" />
       </div>
       <div className="flex flex-col min-w-0">
