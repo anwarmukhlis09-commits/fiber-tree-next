@@ -245,7 +245,7 @@ export default function Home() {
       </header>
 
       {/* Main Canvas */}
-      <main className="flex-1 relative overflow-auto p-4 md:p-12 flex justify-center scroll-smooth">
+      <main className="flex-1 relative overflow-auto p-4 md:p-12 flex justify-center scroll-smooth bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px]">
         <div 
           ref={canvasRef}
           className="relative min-w-full min-h-full origin-top transition-transform duration-100 ease-out"
@@ -275,25 +275,27 @@ export default function Home() {
       </main>
 
       {/* Summary Panel */}
-      <footer className="bg-white border-t border-slate-200 p-4 md:p-6 z-10">
-        <div className="max-w-5xl mx-auto flex flex-col gap-4 md:gap-6">
-          <div className="grid grid-cols-2 md:flex md:justify-around items-center gap-3 md:gap-4">
-            <SummaryCard Icon={Zap} title="TX Power" value={`${treeData.power} dBm`} />
-            <SummaryCard Icon={MapPin} title="Max Dist" value={`${summaryData.totalDist.toFixed(1)} km`} />
-            <SummaryCard Icon={GitBranch} title="Splitters" value={summaryData.totalSplitters} />
-            <SummaryCard Icon={Activity} title="Worst" value={`${summaryData.worstPower.toFixed(1)} dBm`} />
+      <footer className="bg-white border-t border-slate-200 p-3 md:p-6 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+        <div className="max-w-5xl mx-auto flex flex-col gap-3 md:gap-6">
+          {/* Summary Cards Grid */}
+          <div className="grid grid-cols-2 lg:flex lg:justify-around items-stretch gap-2 md:gap-4">
+            <SummaryCard Icon={Zap} title="TX Power" value={`${treeData.power}`} unit="dBm" color="text-amber-500" />
+            <SummaryCard Icon={MapPin} title="Max Distance" value={`${summaryData.totalDist.toFixed(1)}`} unit="km" color="text-blue-500" />
+            <SummaryCard Icon={GitBranch} title="Splitters" value={`${summaryData.totalSplitters}`} unit="pcs" color="text-indigo-500" />
+            <SummaryCard Icon={Activity} title="Worst Loss" value={`${summaryData.worstPower.toFixed(1)}`} unit="dBm" color={summaryData.worstPower > -20 ? 'text-success' : summaryData.worstPower > -27 ? 'text-warning' : 'text-danger'} />
           </div>
           
-          <div className="px-1 md:px-4">
-            <div className="flex justify-between items-end mb-1 md:mb-2 text-[8px] md:text-xs font-bold text-slate-400 uppercase tracking-wider">
-              <span>-35 dBm</span>
-              <span className="text-slate-800 text-[10px] md:text-sm">Worst Link: {summaryData.worstPower.toFixed(1)} dBm</span>
-              <span>10 dBm</span>
+          {/* Power Bar */}
+          <div className="px-1 md:px-2 mt-1">
+            <div className="flex justify-between items-center mb-1 text-[8px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">
+              <span>Low Signal (-35)</span>
+              <span className="text-slate-800 font-extrabold bg-slate-100 px-2 py-0.5 rounded-full">Worst: {summaryData.worstPower.toFixed(1)} dBm</span>
+              <span>High Signal (10)</span>
             </div>
-            <div className="h-2 md:h-3 bg-slate-100 rounded-full overflow-hidden p-0.5">
+            <div className="h-1.5 md:h-2 bg-slate-100 rounded-full overflow-hidden">
               <div 
-                className={`h-full rounded-full transition-all duration-500 ${
-                  summaryData.worstPower > -20 ? 'bg-success' : summaryData.worstPower > -27 ? 'bg-warning' : 'bg-danger'
+                className={`h-full transition-all duration-700 ease-out ${
+                  summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_8px_rgba(250,204,21,0.5)]' : 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.5)]'
                 }`}
                 style={{ width: `${powerPercent}%` }}
               />
@@ -414,15 +416,24 @@ export default function Home() {
   );
 }
 
-function SummaryCard({ Icon, title, value }: { Icon: LucideIcon, title: string, value: any }) {
+function SummaryCard({ Icon, title, value, unit, color }: { Icon: LucideIcon, title: string, value: string, unit: string, color: string }) {
   return (
-    <div className="flex items-center gap-2 md:gap-4">
-      <div className="p-2 md:p-3 bg-slate-50 rounded-lg md:rounded-2xl text-primary border border-slate-100">
-        <Icon className="w-4 h-4 md:w-5 md:h-5" />
+    <div className="bg-slate-50/80 border border-slate-100 rounded-xl md:rounded-2xl p-2.5 md:p-4 flex items-center gap-2.5 md:gap-4 shadow-sm">
+      <div className={`p-2 md:p-3 bg-white rounded-lg md:rounded-xl shadow-sm ${color}`}>
+        <Icon className="w-4 h-4 md:w-6 md:h-6" />
       </div>
-      <div>
-        <h4 className="text-[8px] md:text-[10px] font-bold text-slate-400 uppercase tracking-wider">{title}</h4>
-        <p className="text-sm md:text-lg font-extrabold text-slate-800">{value}</p>
+      <div className="flex flex-col min-w-0">
+        <span className="text-[7px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">
+          {title}
+        </span>
+        <div className="flex items-baseline gap-0.5">
+          <span className="text-sm md:text-xl font-black text-slate-800 truncate">
+            {value}
+          </span>
+          <span className="text-[8px] md:text-xs font-bold text-slate-500">
+            {unit}
+          </span>
+        </div>
       </div>
     </div>
   );
