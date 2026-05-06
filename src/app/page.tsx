@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Network, 
   RotateCcw, 
@@ -31,6 +31,7 @@ const initialData: FiberNode = {
 export default function Home() {
   const [treeData, setTreeData] = useState<FiberNode>(initialData);
   const [zoom, setZoom] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNode, setEditingNode] = useState<FiberNode | null>(null);
   const [formData, setFormData] = useState({
@@ -41,8 +42,11 @@ export default function Home() {
     distance: 1
   });
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const isDragging = useRef(false);
+  const lastPos = useRef({ x: 0, y: 0 });
 
   // Recalculate losses whenever tree data changes
   useEffect(() => {
@@ -54,6 +58,7 @@ export default function Home() {
     if (confirm('Reset semua data?')) {
       setTreeData(initialData);
       setZoom(1);
+      setOffset({ x: 0, y: 0 });
     }
   };
 
@@ -145,63 +150,90 @@ export default function Home() {
     setIsModalOpen(false);
   };
 
-  useEffect(() => {
-    const draw = () => {
-      if (!svgRef.current || !canvasRef.current) return;
-      const svg = svgRef.current;
-      svg.innerHTML = '';
-      
-      const canvasRect = canvasRef.current.getBoundingClientRect();
+  // SVG drawing
+  const drawConnections = useCallback(() => {
+    if (!svgRef.current || !canvasRef.current) return;
+    const svg = svgRef.current;
+    svg.innerHTML = '';
+    
+    const canvasRect = canvasRef.current.getBoundingClientRect();
 
-      const drawLink = (node: FiberNode) => {
-        const parentEl = document.getElementById(`node-${node.id}`);
-        if (!parentEl || !node.children) return;
+    const drawLink = (node: FiberNode) => {
+      const parentEl = document.getElementById(`node-${node.id}`);
+      if (!parentEl || !node.children) return;
 
-        const parentNodeVisual = parentEl.querySelector(':scope > div');
-        if (!parentNodeVisual) return;
+      const parentNodeVisual = parentEl.querySelector(':scope > div');
+      if (!parentNodeVisual) return;
 
-        const pRect = parentNodeVisual.getBoundingClientRect();
-        const pX = (pRect.left + pRect.right) / 2 - canvasRect.left;
-        const pY = pRect.bottom - canvasRect.top;
+      const pRect = parentNodeVisual.getBoundingClientRect();
+      const pX = (pRect.left + pRect.right) / 2 - canvasRect.left;
+      const pY = pRect.bottom - canvasRect.top;
 
-        node.children.forEach(child => {
-          const childEl = document.getElementById(`node-${child.id}`);
-          if (!childEl) return;
+      node.children.forEach(child => {
+        const childEl = document.getElementById(`node-${child.id}`);
+        if (!childEl) return;
 
-          const childNodeVisual = childEl.querySelector(':scope > div');
-          if (!childNodeVisual) return;
+        const childNodeVisual = childEl.querySelector(':scope > div');
+        if (!childNodeVisual) return;
 
-          const cRect = childNodeVisual.getBoundingClientRect();
-          const cX = (cRect.left + cRect.right) / 2 - canvasRect.left;
-          const cY = cRect.top - canvasRect.top;
+        const cRect = childNodeVisual.getBoundingClientRect();
+        const cX = (cRect.left + cRect.right) / 2 - canvasRect.left;
+        const cY = cRect.top - canvasRect.top;
 
-          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-          const zPX = pX / zoom;
-          const zPY = pY / zoom;
-          const zCX = cX / zoom;
-          const zCY = cY / zoom;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        const zPX = pX / zoom;
+        const zPY = pY / zoom;
+        const zCX = cX / zoom;
+        const zCY = cY / zoom;
 
-          const d = `M ${zPX} ${zPY} C ${zPX} ${(zPY + zCY) / 2}, ${zCX} ${(zPY + zCY) / 2}, ${zCX} ${zCY}`;
-          path.setAttribute("d", d);
-          path.setAttribute("stroke", "#e2e8f0");
-          path.setAttribute("stroke-width", "2");
-          path.setAttribute("fill", "none");
-          svg.appendChild(path);
+        const d = `M ${zPX} ${zPY} C ${zPX} ${(zPY + zCY) / 2}, ${zCX} ${(zPY + zCY) / 2}, ${zCX} ${zCY}`;
+        path.setAttribute("d", d);
+        path.setAttribute("stroke", "#cbd5e1");
+        path.setAttribute("stroke-width", "2");
+        path.setAttribute("fill", "none");
+        svg.appendChild(path);
 
-          drawLink(child);
-        });
-      };
-
-      drawLink(treeData);
+        drawLink(child);
+      });
     };
 
-    const timer = setTimeout(draw, 100);
-    window.addEventListener('resize', draw);
+    drawLink(treeData);
+  }, [treeData, zoom]);
+
+  useEffect(() => {
+    const timer = setTimeout(drawConnections, 100);
+    window.addEventListener('resize', drawConnections);
     return () => {
       clearTimeout(timer);
-      window.removeEventListener('resize', draw);
+      window.removeEventListener('resize', drawConnections);
     };
-  }, [treeData, zoom]);
+  }, [drawConnections]);
+
+  // Pan Logic
+  const onPointerDown = (e: React.PointerEvent) => {
+    if ((e.target as HTMLElement).closest('.node') || (e.target as HTMLElement).closest('button')) return;
+    isDragging.current = true;
+    lastPos.current = { x: e.clientX, y: e.clientY };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!isDragging.current) return;
+    const dx = e.clientX - lastPos.current.x;
+    const dy = e.clientY - lastPos.current.y;
+    setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
+    lastPos.current = { x: e.clientX, y: e.clientY };
+    drawConnections();
+  };
+
+  const onPointerUp = () => {
+    isDragging.current = false;
+  };
+
+  const handleZoom = (delta: number) => {
+    setZoom(prev => Math.min(3, Math.max(0.2, prev + delta)));
+    setTimeout(drawConnections, 50);
+  };
 
   const summaryData = (() => {
     let totalDist = 0;
@@ -223,9 +255,9 @@ export default function Home() {
   const powerPercent = Math.min(100, Math.max(0, ((summaryData.worstPower + 35) / 45) * 100));
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans">
+    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans touch-none">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center z-10 shadow-sm">
+      <header className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center z-50 shadow-sm">
         <div className="flex items-center gap-2 md:gap-3">
           <div className="bg-success/10 p-1.5 md:p-2 rounded-lg text-success">
             <Network className="w-5 h-5 md:w-6 md:h-6" />
@@ -244,39 +276,48 @@ export default function Home() {
         </button>
       </header>
 
-      {/* Main Canvas */}
-      <main className="flex-1 relative overflow-auto p-4 md:p-12 flex justify-center scroll-smooth bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px]">
+      {/* Main Canvas Area */}
+      <main 
+        ref={containerRef}
+        className="flex-1 relative overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px] cursor-grab active:cursor-grabbing"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+      >
         <div 
           ref={canvasRef}
-          className="relative min-w-full min-h-full origin-top transition-transform duration-100 ease-out"
-          style={{ transform: `scale(${zoom})` }}
+          className="absolute inset-0 flex items-start justify-center pt-20 transition-transform duration-75 ease-out origin-center"
+          style={{ 
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+          }}
         >
           <svg 
             ref={svgRef}
-            className="absolute top-0 left-0 w-full h-full pointer-events-none z-0"
+            className="absolute top-0 left-0 w-[5000px] h-[5000px] pointer-events-none z-0 -translate-x-1/2"
+            style={{ left: '50%' }}
           />
-          <div className="relative z-10 flex flex-col items-center">
+          <div className="relative z-10">
             <TreeNode node={treeData} onNodeClick={handleNodeClick} />
           </div>
         </div>
 
         {/* Zoom Controls */}
-        <div className="fixed right-3 md:right-6 top-20 md:top-24 flex flex-col gap-2 md:gap-3 z-20">
-          <button onClick={() => setZoom(z => Math.min(2, z + 0.1))} className="w-10 h-10 md:w-12 md:h-12 bg-white border border-slate-200 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg hover:text-primary transition-all">
-            <Plus className="w-4 h-4 md:w-5 md:h-5" />
+        <div className="absolute right-4 md:right-8 top-4 md:top-8 flex flex-col gap-2 md:gap-4 z-40">
+          <button onClick={() => handleZoom(0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl hover:text-primary transition-all active:scale-90">
+            <Plus className="w-5 h-5 md:w-6 md:h-6" />
           </button>
-          <button onClick={() => setZoom(z => Math.max(0.3, z - 0.1))} className="w-10 h-10 md:w-12 md:h-12 bg-white border border-slate-200 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg hover:text-primary transition-all">
-            <Minus className="w-4 h-4 md:w-5 md:h-5" />
+          <button onClick={() => handleZoom(-0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl hover:text-primary transition-all active:scale-90">
+            <Minus className="w-5 h-5 md:w-6 md:h-6" />
           </button>
-          <button onClick={() => setZoom(1)} className="w-10 h-10 md:w-12 md:h-12 bg-white border border-slate-200 rounded-lg md:rounded-xl flex items-center justify-center shadow-lg hover:text-primary transition-all">
-            <Maximize className="w-4 h-4 md:w-5 md:h-5" />
+          <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(drawConnections, 50); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl hover:text-primary transition-all active:scale-90">
+            <Maximize className="w-5 h-5 md:w-6 md:h-6" />
           </button>
         </div>
       </main>
 
       {/* Summary Panel */}
-      <footer className="bg-white border-t border-slate-200 p-4 md:p-6 pb-8 md:pb-10 z-10 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <div className="max-w-5xl mx-auto flex flex-col gap-4 md:gap-6">
+      <footer className="bg-white border-t border-slate-200 p-3 md:p-6 pb-8 md:pb-10 z-50 shadow-[0_-8px_10px_-4px_rgba(0,0,0,0.05)]">
+        <div className="max-w-5xl mx-auto flex flex-col gap-3 md:gap-6">
           <div className="grid grid-cols-2 lg:flex lg:justify-around items-stretch gap-2.5 md:gap-4">
             <SummaryCard Icon={Zap} title="TX Power" value={`${treeData.power}`} unit="dBm" color="text-amber-500" />
             <SummaryCard Icon={MapPin} title="Max Distance" value={`${summaryData.totalDist.toFixed(1)}`} unit="km" color="text-blue-500" />
@@ -290,10 +331,10 @@ export default function Home() {
               <span className="text-slate-800 font-extrabold bg-slate-100 px-2 py-0.5 rounded-full">Worst: {summaryData.worstPower.toFixed(1)} dBm</span>
               <span>High Signal (10)</span>
             </div>
-            <div className="h-2 md:h-2.5 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-1.5 md:h-2.5 bg-slate-100 rounded-full overflow-hidden">
               <div 
                 className={`h-full transition-all duration-700 ease-out ${
-                  summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_8px_rgba(250,204,21,0.5)]' : 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.5)]'
+                  summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_12px_rgba(16,185,129,0.4)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_12px_rgba(250,204,21,0.4)]' : 'bg-danger shadow-[0_0_12px_rgba(239,68,68,0.4)]'
                 }`}
                 style={{ width: `${powerPercent}%` }}
               />
@@ -302,10 +343,10 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* Modal */}
+      {/* Modal - Unchanged but ensured z-index */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl md:rounded-3xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-center mb-4 md:mb-6">
               <h2 className="text-xl md:text-2xl font-bold text-slate-800">
                 {editingNode?.type === 'olt' ? 'Transmitter Config' : 'Splitter Config'}
@@ -322,7 +363,7 @@ export default function Home() {
                   type="text" 
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary transition-colors"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary transition-colors"
                 />
               </div>
 
@@ -333,7 +374,7 @@ export default function Home() {
                     type="number" 
                     value={formData.power}
                     onChange={e => setFormData({...formData, power: parseFloat(e.target.value)})}
-                    className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
                   />
                 </div>
               )}
@@ -343,7 +384,7 @@ export default function Home() {
                 <select 
                   value={formData.ratio}
                   onChange={e => setFormData({...formData, ratio: e.target.value})}
-                  className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
                 >
                   <option value="1">No Splitter (1:1)</option>
                   <option value="2">1:2 (-3.5 dB)</option>
@@ -361,7 +402,7 @@ export default function Home() {
                   <select 
                     value={formData.percentage}
                     onChange={e => setFormData({...formData, percentage: parseInt(e.target.value)})}
-                    className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
                   >
                     {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50].map(p => (
                       <option key={p} value={p}>{p < 10 ? `0${p}` : p}:{100-p}</option>
@@ -377,35 +418,19 @@ export default function Home() {
                     type="number" 
                     value={formData.distance}
                     onChange={e => setFormData({...formData, distance: parseFloat(e.target.value)})}
-                    className="w-full px-3 md:px-4 py-2.5 md:py-3 bg-slate-50 border border-slate-200 rounded-lg md:rounded-xl outline-none focus:border-primary"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
                   />
                   <p className="text-[10px] md:text-xs text-slate-400 mt-1">Cable Loss: -{(formData.distance * LOSS_PER_KM).toFixed(2)} dB</p>
                 </div>
               )}
             </div>
 
-            <div className="flex gap-2 md:gap-4 mt-6 md:mt-8">
-              <button 
-                onClick={() => setIsModalOpen(false)}
-                className="flex-1 px-4 md:px-6 py-2.5 md:py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors text-sm md:text-base"
-              >
-                Cancel
-              </button>
+            <div className="flex gap-4 mt-8">
+              <button onClick={() => setIsModalOpen(false)} className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
               {editingNode?.type !== 'olt' && (
-                <button 
-                  onClick={deleteNode}
-                  className="px-4 md:px-6 py-2.5 md:py-3 bg-danger/10 text-danger font-bold rounded-xl hover:bg-danger/20 transition-colors text-sm md:text-base"
-                >
-                  <span className="md:hidden"><X className="w-5 h-5"/></span>
-                  <span className="hidden md:inline">Delete</span>
-                </button>
+                <button onClick={deleteNode} className="px-6 py-3 bg-danger/10 text-danger font-bold rounded-xl hover:bg-danger/20 transition-colors">Delete</button>
               )}
-              <button 
-                onClick={saveNode}
-                className="flex-1 px-4 md:px-6 py-2.5 md:py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20 text-sm md:text-base"
-              >
-                Save
-              </button>
+              <button onClick={saveNode} className="flex-1 px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20">Save</button>
             </div>
           </div>
         </div>
@@ -416,21 +441,15 @@ export default function Home() {
 
 function SummaryCard({ Icon, title, value, unit, color }: { Icon: LucideIcon, title: string, value: string, unit: string, color: string }) {
   return (
-    <div className="bg-slate-50/80 border border-slate-100 rounded-xl md:rounded-2xl p-2.5 md:p-4 flex items-center gap-3 md:gap-4 shadow-sm">
-      <div className={`p-2.5 md:p-3 bg-white rounded-lg md:rounded-xl shadow-sm ${color}`}>
+    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 md:p-4 flex items-center gap-3 md:gap-4 shadow-sm">
+      <div className={`p-2.5 md:p-3 bg-white rounded-xl shadow-sm ${color}`}>
         <Icon className="w-4 h-4 md:w-6 md:h-6" />
       </div>
       <div className="flex flex-col min-w-0">
-        <span className="text-[7px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">
-          {title}
-        </span>
+        <span className="text-[7px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">{title}</span>
         <div className="flex items-baseline gap-0.5">
-          <span className="text-sm md:text-xl font-black text-slate-800 truncate">
-            {value}
-          </span>
-          <span className="text-[8px] md:text-xs font-bold text-slate-500">
-            {unit}
-          </span>
+          <span className="text-sm md:text-xl font-black text-slate-800 truncate">{value}</span>
+          <span className="text-[8px] md:text-xs font-bold text-slate-500">{unit}</span>
         </div>
       </div>
     </div>
