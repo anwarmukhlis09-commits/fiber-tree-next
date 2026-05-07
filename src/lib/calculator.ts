@@ -25,15 +25,15 @@ export const RATIO_LOSS: Record<number, number> = {
 export function calculateAllLosses(node: FiberNode, parentPower: number = 8): void {
   const cableLoss = node.distance * LOSS_PER_KM;
   
-  // Power arriving at this node after cable loss
+  // Power arriving at this node's input
   const powerAtInput = node.type === 'olt' ? (node.power ?? 8) : (parentPower - cableLoss);
 
-  if (node.type === 'splitter' && node.ratio !== 'unbalanced' && typeof node.ratio === 'number') {
-    // For balanced splitter, display the OUTPUT power
+  // If a balanced ratio is set (not 1), calculate and show the OUTPUT power
+  if (node.ratio !== 'unbalanced' && typeof node.ratio === 'number' && node.ratio > 1) {
     const splitLoss = RATIO_LOSS[node.ratio] || 0;
     node.currentPower = powerAtInput - splitLoss;
   } else {
-    // For OLT or PLC Splitter (PLC handles loss in children), display the INPUT power
+    // For ratio 1 (no splitter) or PLC (PLC handles loss in children), show the input power
     node.currentPower = powerAtInput;
   }
 
