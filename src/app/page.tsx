@@ -48,6 +48,7 @@ export default function Home() {
   const svgRef = useRef<SVGSVGElement>(null);
   const isDragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
+  const lastTouchDist = useRef<number | null>(null);
 
   useEffect(() => {
     const newData = { ...treeData };
@@ -140,8 +141,6 @@ export default function Home() {
     if (!svgRef.current) return;
     const svg = svgRef.current;
     svg.innerHTML = '';
-    
-    // Crucial: get current SVG position in the window
     const svgRect = svg.getBoundingClientRect();
 
     const drawLink = (node: FiberNode) => {
@@ -152,7 +151,6 @@ export default function Home() {
       if (!parentNodeVisual) return;
 
       const pRect = parentNodeVisual.getBoundingClientRect();
-      // Calculate coordinates relative to SVG top-left, adjusted by zoom
       const pX = (pRect.left + pRect.width / 2 - svgRect.left) / zoom;
       const pY = (pRect.bottom - svgRect.top) / zoom;
 
@@ -169,7 +167,7 @@ export default function Home() {
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         const d = `M ${pX} ${pY} C ${pX} ${(pY + cY) / 2}, ${cX} ${(pY + cY) / 2}, ${cX} ${cY}`;
         path.setAttribute("d", d);
-        path.setAttribute("stroke", "#94a3b8"); // Slightly darker for better visibility
+        path.setAttribute("stroke", "#94a3b8");
         path.setAttribute("stroke-width", "2.5");
         path.setAttribute("fill", "none");
         svg.appendChild(path);
@@ -180,11 +178,39 @@ export default function Home() {
   }, [treeData, zoom]);
 
   useEffect(() => {
-    const timer = setTimeout(drawConnections, 150); // Increased delay slightly
+    const timer = setTimeout(drawConnections, 150);
     window.addEventListener('resize', drawConnections);
     return () => { clearTimeout(timer); window.removeEventListener('resize', drawConnections); };
   }, [drawConnections]);
 
+  // Pinch-to-Zoom Helper
+  const getTouchDist = (touches: React.TouchList) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      lastTouchDist.current = getTouchDist(e.touches);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && lastTouchDist.current !== null) {
+      const dist = getTouchDist(e.touches);
+      const delta = dist / lastTouchDist.current;
+      setZoom(prev => Math.min(3, Math.max(0.1, prev * delta)));
+      lastTouchDist.current = dist;
+      setTimeout(drawConnections, 50);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    lastTouchDist.current = null;
+  };
+
+  // Pointer Events (Mouse/Single Finger Pan)
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.node') || (e.target as HTMLElement).closest('button')) return;
     isDragging.current = true;
@@ -236,7 +262,12 @@ export default function Home() {
       <main 
         ref={containerRef}
         className="flex-1 relative overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px] cursor-grab active:cursor-grabbing"
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={() => isDragging.current = false}
+        onPointerDown={onPointerDown} 
+        onPointerMove={onPointerMove} 
+        onPointerUp={() => isDragging.current = false}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <div 
           ref={canvasRef}
