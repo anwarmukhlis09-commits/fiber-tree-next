@@ -1,64 +1,80 @@
 'use client';
 
 import React from 'react';
-import { Zap, Share2 } from 'lucide-react';
-import { FiberNode, getStatusClass } from '@/lib/calculator';
 import { motion } from 'framer-motion';
+import { Zap, GitBranch, PlusCircle } from 'lucide-react';
+import { FiberNode, getStatusClass } from '@/lib/calculator';
 
 interface TreeNodeProps {
   node: FiberNode;
   onNodeClick: (node: FiberNode) => void;
+  onAddChild?: (parentId: string) => void;
 }
 
-const TreeNode: React.FC<TreeNodeProps> = ({ node, onNodeClick }) => {
-  const isOLT = node.type === 'olt';
+export default function TreeNode({ node, onNodeClick, onAddChild }: TreeNodeProps) {
+  const isOlt = node.type === 'olt';
   const statusClass = getStatusClass(node.currentPower);
-
-  let ratioText = '';
-  if (node.ratio === 'unbalanced') {
-    if (node.percentage === 0) {
-      ratioText = 'Tanpa Ratio';
-    } else {
-      const p = node.percentage || 50;
-      const p1 = p < 10 ? `0${p}` : p;
-      ratioText = `${p1}:${100 - p}`;
-    }
-  } else if ((node.ratio as number) > 1) {
-    ratioText = `1:${node.ratio}`;
-  }
 
   return (
     <div className="node-container" id={`node-${node.id}`}>
-      <motion.div
-        layout
+      <motion.div 
         initial={{ opacity: 0, scale: 0.8 }}
         animate={{ opacity: 1, scale: 1 }}
-        whileHover={{ scale: 1.05 }}
-        onClick={() => onNodeClick(node)}
-        className={`
-          flex flex-col items-center justify-center cursor-pointer bg-white shadow-md transition-all border-2 z-10
-          ${isOLT ? 'w-40 h-20 rounded-xl' : 'w-24 h-24 rounded-full'}
-          ${statusClass === 'status-safe' ? 'border-success text-success' : ''}
-          ${statusClass === 'status-warning' ? 'border-warning text-warning' : ''}
-          ${statusClass === 'status-danger' ? 'border-danger text-danger' : ''}
-          ${!statusClass ? 'border-primary' : ''}
-        `}
+        whileHover={{ y: -5 }}
+        className="node relative"
       >
-        {isOLT ? <Zap className="w-4 h-4 mb-1" /> : <Share2 className="w-4 h-4 mb-1" />}
-        <span className="text-[10px] font-bold uppercase text-zinc-500">{node.name}</span>
-        <span className="text-sm font-bold">{node.currentPower.toFixed(1)} dBm</span>
-        {ratioText && <span className="text-[10px] font-bold text-primary">{ratioText}</span>}
+        <div 
+          onClick={() => onNodeClick(node)}
+          className={`
+            cursor-pointer transition-all duration-300 shadow-lg
+            ${isOlt ? 'w-48 h-24 rounded-2xl border-2' : 'w-32 h-32 rounded-full border-4'}
+            bg-white flex flex-col items-center justify-center p-4 text-center
+            ${statusClass}
+          `}
+        >
+          {isOlt ? (
+            <Zap className="w-5 h-5 mb-1" />
+          ) : (
+            <GitBranch className="w-5 h-5 mb-1" />
+          )}
+          
+          <span className="text-[10px] font-bold uppercase text-slate-400 tracking-tight truncate w-full">
+            {node.name}
+          </span>
+          
+          <div className="flex flex-col items-center">
+            <span className="text-lg font-black leading-none">
+              {node.currentPower.toFixed(1)} <span className="text-[10px] font-bold">dBm</span>
+            </span>
+            {node.ratio !== 1 && (
+              <span className="text-[9px] font-extrabold bg-slate-100 px-2 py-0.5 rounded-full text-slate-500 mt-1 uppercase tracking-tighter">
+                {node.ratio === 'unbalanced' ? `PLC ${node.percentage}:${100-(node.percentage||0)}` : `Ratio 1:${node.ratio}`}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Manual Add Child Button */}
+        {onAddChild && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddChild(node.id);
+            }}
+            className="absolute -bottom-2 -right-2 bg-primary text-white rounded-full p-1 shadow-lg hover:scale-110 transition-transform z-20 border-2 border-white"
+          >
+            <PlusCircle className="w-5 h-5" />
+          </button>
+        )}
       </motion.div>
 
       {node.children && node.children.length > 0 && (
         <div className="tree-children">
           {node.children.map((child) => (
-            <TreeNode key={child.id} node={child} onNodeClick={onNodeClick} />
+            <TreeNode key={child.id} node={child} onNodeClick={onNodeClick} onAddChild={onAddChild} />
           ))}
         </div>
       )}
     </div>
   );
-};
-
-export default TreeNode;
+}

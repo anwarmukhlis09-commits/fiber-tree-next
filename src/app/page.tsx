@@ -12,6 +12,7 @@ import {
   GitBranch, 
   Activity,
   X,
+  PlusCircle,
   LucideIcon
 } from 'lucide-react';
 import { FiberNode, calculateAllLosses, LOSS_PER_KM } from '@/lib/calculator';
@@ -48,7 +49,6 @@ export default function Home() {
   const isDragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
 
-  // Recalculate losses whenever tree data changes
   useEffect(() => {
     const newData = { ...treeData };
     calculateAllLosses(newData, newData.power);
@@ -74,57 +74,50 @@ export default function Home() {
     setIsModalOpen(true);
   };
 
+  const addChild = (parentId: string) => {
+    const updateTree = (root: FiberNode): FiberNode => {
+      if (root.id === parentId) {
+        const newChild: FiberNode = {
+          id: Math.random().toString(36).substr(2, 9),
+          name: `SPL-${root.name.split('-')[1] || ''}.${root.children.length + 1}`,
+          type: 'splitter',
+          ratio: 1,
+          currentPower: 0,
+          distance: 1,
+          children: []
+        };
+        return { ...root, children: [...root.children, newChild] };
+      }
+      return { ...root, children: root.children.map(updateTree) };
+    };
+    const newTree = updateTree(treeData);
+    calculateAllLosses(newTree, newTree.power);
+    setTreeData(newTree);
+  };
+
   const saveNode = () => {
     if (!editingNode) return;
-
     const updateTree = (root: FiberNode): FiberNode => {
       if (root.id === editingNode.id) {
         const newNode = { ...root };
         newNode.name = formData.name;
         newNode.distance = formData.distance;
-        if (newNode.type === 'olt') {
-          newNode.power = formData.power;
-        }
-
+        if (newNode.type === 'olt') newNode.power = formData.power;
         const newRatio = formData.ratio === 'unbalanced' ? 'unbalanced' : parseInt(formData.ratio);
-        if (newRatio !== newNode.ratio) {
+        if (newRatio === 'unbalanced' && newNode.ratio !== 'unbalanced') {
+          newNode.ratio = 'unbalanced';
+          newNode.children = [
+            { id: Math.random().toString(36).substr(2, 9), name: 'Drop', type: 'splitter', ratio: 1, currentPower: 0, distance: 0, children: [] },
+            { id: Math.random().toString(36).substr(2, 9), name: 'Through', type: 'splitter', ratio: 1, currentPower: 0, distance: 0.1, children: [] }
+          ];
+        } else {
           newNode.ratio = newRatio;
-          let targetCount = 0;
-          if (newRatio === 'unbalanced') targetCount = 2;
-          else if (typeof newRatio === 'number' && newRatio > 1) targetCount = newRatio;
-
-          if (newNode.children.length < targetCount) {
-            const newChildren = [...newNode.children];
-            for (let i = newNode.children.length; i < targetCount; i++) {
-              newChildren.push({
-                id: Math.random().toString(36).substr(2, 9),
-                name: `SPL-${newNode.name.split('-')[1] || ''}.${i + 1}`,
-                type: 'splitter',
-                ratio: 1,
-                currentPower: 0,
-                distance: 1,
-                children: []
-              });
-            }
-            newNode.children = newChildren;
-          } else if (newNode.children.length > targetCount) {
-            newNode.children = newNode.children.slice(0, targetCount);
-          }
         }
-
-        if (newNode.ratio === 'unbalanced') {
-          newNode.percentage = formData.percentage;
-        }
-
+        if (newNode.ratio === 'unbalanced') newNode.percentage = formData.percentage;
         return newNode;
       }
-
-      return {
-        ...root,
-        children: root.children.map(updateTree)
-      };
+      return { ...root, children: root.children.map(updateTree) };
     };
-
     const newTree = updateTree(treeData);
     calculateAllLosses(newTree, newTree.power);
     setTreeData(newTree);
@@ -133,29 +126,22 @@ export default function Home() {
 
   const deleteNode = () => {
     if (!editingNode || editingNode.type === 'olt') return;
-    if (!confirm('Hapus node ini dan semua turunannya?')) return;
-
+    if (!confirm('Hapus node ini?')) return;
     const removeFromTree = (root: FiberNode): FiberNode => {
-      return {
-        ...root,
-        children: root.children
-          .filter(child => child.id !== editingNode.id)
-          .map(removeFromTree)
-      };
+      return { ...root, children: root.children.filter(child => child.id !== editingNode.id).map(removeFromTree) };
     };
-
     const newTree = removeFromTree(treeData);
     calculateAllLosses(newTree, newTree.power);
     setTreeData(newTree);
     setIsModalOpen(false);
   };
 
-  // SVG drawing
   const drawConnections = useCallback(() => {
     if (!svgRef.current || !canvasRef.current) return;
     const svg = svgRef.current;
     svg.innerHTML = '';
     
+    // Get the untransformed canvas position
     const canvasRect = canvasRef.current.getBoundingClientRect();
 
     const drawLink = (node: FiberNode) => {
@@ -166,13 +152,13 @@ export default function Home() {
       if (!parentNodeVisual) return;
 
       const pRect = parentNodeVisual.getBoundingClientRect();
+      // Relative to canvas, accounting for current zoom
       const pX = (pRect.left + pRect.right) / 2 - canvasRect.left;
       const pY = pRect.bottom - canvasRect.top;
 
       node.children.forEach(child => {
         const childEl = document.getElementById(`node-${child.id}`);
         if (!childEl) return;
-
         const childNodeVisual = childEl.querySelector(':scope > div');
         if (!childNodeVisual) return;
 
@@ -180,36 +166,33 @@ export default function Home() {
         const cX = (cRect.left + cRect.right) / 2 - canvasRect.left;
         const cY = cRect.top - canvasRect.top;
 
-        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        // Since the SVG is INSIDE the zoomed container, we need to divide by zoom
+        // to get the "logical" coordinates that the CSS transform will then scale up.
         const zPX = pX / zoom;
         const zPY = pY / zoom;
         const zCX = cX / zoom;
         const zCY = cY / zoom;
 
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         const d = `M ${zPX} ${zPY} C ${zPX} ${(zPY + zCY) / 2}, ${zCX} ${(zPY + zCY) / 2}, ${zCX} ${zCY}`;
         path.setAttribute("d", d);
         path.setAttribute("stroke", "#cbd5e1");
+        path.setAttribute("stroke-width", (2 / zoom).toString()); // Keep line width consistent visually? No, keep it fixed logic size
         path.setAttribute("stroke-width", "2");
         path.setAttribute("fill", "none");
         svg.appendChild(path);
-
         drawLink(child);
       });
     };
-
     drawLink(treeData);
   }, [treeData, zoom]);
 
   useEffect(() => {
     const timer = setTimeout(drawConnections, 100);
     window.addEventListener('resize', drawConnections);
-    return () => {
-      clearTimeout(timer);
-      window.removeEventListener('resize', drawConnections);
-    };
+    return () => { clearTimeout(timer); window.removeEventListener('resize', drawConnections); };
   }, [drawConnections]);
 
-  // Pan Logic
   const onPointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.node') || (e.target as HTMLElement).closest('button')) return;
     isDragging.current = true;
@@ -223,99 +206,57 @@ export default function Home() {
     const dy = e.clientY - lastPos.current.y;
     setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
     lastPos.current = { x: e.clientX, y: e.clientY };
-    drawConnections();
-  };
-
-  const onPointerUp = () => {
-    isDragging.current = false;
+    // We don't necessarily need to redraw on every move if SVG is inside the transform
   };
 
   const handleZoom = (delta: number) => {
-    setZoom(prev => Math.min(3, Math.max(0.2, prev + delta)));
+    setZoom(prev => Math.min(3, Math.max(0.1, prev + delta)));
     setTimeout(drawConnections, 50);
   };
 
-  const summaryData = (() => {
-    let totalDist = 0;
-    let totalSplitters = 0;
-    let worstPower = treeData.power || 8;
-
-    const traverse = (node: FiberNode, currentDist: number) => {
-      const d = currentDist + node.distance;
-      totalDist = Math.max(totalDist, d);
-      if (node.ratio !== 1) totalSplitters++;
-      if (node.currentPower < worstPower) worstPower = node.currentPower;
-      node.children.forEach(c => traverse(c, d));
-    };
-
-    traverse(treeData, 0);
-    return { totalDist, totalSplitters, worstPower };
-  })();
-
-  const powerPercent = Math.min(100, Math.max(0, ((summaryData.worstPower + 35) / 45) * 100));
-
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans touch-none">
-      {/* Header */}
       <header className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center z-50 shadow-sm">
         <div className="flex items-center gap-2 md:gap-3">
-          <div className="bg-success/10 p-1.5 md:p-2 rounded-lg text-success">
-            <Network className="w-5 h-5 md:w-6 md:h-6" />
-          </div>
+          <div className="bg-success/10 p-1.5 md:p-2 rounded-lg text-success"><Network className="w-5 h-5 md:w-6 md:h-6" /></div>
           <div>
             <h1 className="text-base md:text-xl font-bold text-slate-800 leading-none">Fiber Optic Calculator</h1>
             <p className="text-[10px] md:text-sm text-slate-500 mt-0.5 md:mt-1">Tree Topology Designer</p>
           </div>
         </div>
-        <button 
-          onClick={handleReset}
-          className="flex items-center gap-1.5 md:gap-2 bg-white border border-slate-200 px-3 md:px-4 py-1.5 md:py-2 rounded-lg md:rounded-xl font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm text-sm"
-        >
-          <RotateCcw className="w-3.5 h-3.5 md:w-4 md:h-4" />
-          <span className="hidden sm:inline">Reset</span>
+        <button onClick={handleReset} className="flex items-center gap-1.5 bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-medium text-slate-600 hover:bg-slate-50 transition-colors shadow-sm text-sm">
+          <RotateCcw className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Reset</span>
         </button>
       </header>
 
-      {/* Main Canvas Area */}
       <main 
         ref={containerRef}
         className="flex-1 relative overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px] cursor-grab active:cursor-grabbing"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={() => isDragging.current = false}
       >
         <div 
           ref={canvasRef}
           className="absolute inset-0 flex items-start justify-center pt-20 transition-transform duration-75 ease-out origin-center"
-          style={{ 
-            transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-          }}
+          style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
         >
+          {/* MOVED SVG INSIDE THE TRANSFORMED CONTAINER */}
           <svg 
-            ref={svgRef}
-            className="absolute top-0 left-0 w-[5000px] h-[5000px] pointer-events-none z-0 -translate-x-1/2"
-            style={{ left: '50%' }}
+            ref={svgRef} 
+            className="absolute inset-0 pointer-events-none z-0" 
+            style={{ width: '10000px', height: '10000px', left: '-5000px', top: '0' }}
           />
           <div className="relative z-10">
-            <TreeNode node={treeData} onNodeClick={handleNodeClick} />
+            <TreeNode node={treeData} onNodeClick={handleNodeClick} onAddChild={addChild} />
           </div>
         </div>
 
-        {/* Zoom Controls */}
         <div className="absolute right-4 md:right-8 top-4 md:top-8 flex flex-col gap-2 md:gap-4 z-40">
-          <button onClick={() => handleZoom(0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl hover:text-primary transition-all active:scale-90">
-            <Plus className="w-5 h-5 md:w-6 md:h-6" />
-          </button>
-          <button onClick={() => handleZoom(-0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl hover:text-primary transition-all active:scale-90">
-            <Minus className="w-5 h-5 md:w-6 md:h-6" />
-          </button>
-          <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(drawConnections, 50); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl md:rounded-2xl flex items-center justify-center shadow-xl hover:text-primary transition-all active:scale-90">
-            <Maximize className="w-5 h-5 md:w-6 md:h-6" />
-          </button>
+          <button onClick={() => handleZoom(0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Plus className="w-5 h-5" /></button>
+          <button onClick={() => handleZoom(-0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Minus className="w-5 h-5" /></button>
+          <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(drawConnections, 50); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Maximize className="w-5 h-5" /></button>
         </div>
       </main>
 
-      {/* Summary Panel */}
       <footer className="bg-white border-t border-slate-200 p-3 md:p-6 pb-8 md:pb-10 z-50 shadow-[0_-8px_10px_-4px_rgba(0,0,0,0.05)]">
         <div className="max-w-5xl mx-auto flex flex-col gap-3 md:gap-6">
           <div className="grid grid-cols-2 lg:flex lg:justify-around items-stretch gap-2.5 md:gap-4">
@@ -324,7 +265,6 @@ export default function Home() {
             <SummaryCard Icon={GitBranch} title="Splitters" value={`${summaryData.totalSplitters}`} unit="pcs" color="text-indigo-500" />
             <SummaryCard Icon={Activity} title="Worst Loss" value={`${summaryData.worstPower.toFixed(1)}`} unit="dBm" color={summaryData.worstPower > -20 ? 'text-success' : summaryData.worstPower > -27 ? 'text-warning' : 'text-danger'} />
           </div>
-          
           <div className="px-1 md:px-2 mt-1">
             <div className="flex justify-between items-center mb-1.5 text-[8px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">
               <span>Low Signal (-35)</span>
@@ -332,60 +272,33 @@ export default function Home() {
               <span>High Signal (10)</span>
             </div>
             <div className="h-1.5 md:h-2.5 bg-slate-100 rounded-full overflow-hidden">
-              <div 
-                className={`h-full transition-all duration-700 ease-out ${
-                  summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_12px_rgba(16,185,129,0.4)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_12px_rgba(250,204,21,0.4)]' : 'bg-danger shadow-[0_0_12px_rgba(239,68,68,0.4)]'
-                }`}
-                style={{ width: `${powerPercent}%` }}
-              />
+              <div className={`h-full transition-all duration-700 ease-out ${summaryData.worstPower > -20 ? 'bg-success' : summaryData.worstPower > -27 ? 'bg-warning' : 'bg-danger'}`} style={{ width: `${Math.min(100, Math.max(0, ((summaryData.worstPower + 35) / 45) * 100))}%` }} />
             </div>
           </div>
         </div>
       </footer>
 
-      {/* Modal - Unchanged but ensured z-index */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-3xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
-            <div className="flex justify-between items-center mb-4 md:mb-6">
-              <h2 className="text-xl md:text-2xl font-bold text-slate-800">
-                {editingNode?.type === 'olt' ? 'Transmitter Config' : 'Splitter Config'}
-              </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X className="w-6 h-6" />
-              </button>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold text-slate-800">{editingNode?.type === 'olt' ? 'Transmitter Config' : 'Splitter Config'}</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
             </div>
-
-            <div className="space-y-4 md:space-y-5">
+            <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Node Name</label>
-                <input 
-                  type="text" 
-                  value={formData.name}
-                  onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary transition-colors"
-                />
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Node Name</label>
+                <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary" />
               </div>
-
               {editingNode?.type === 'olt' && (
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Power Output (dBm)</label>
-                  <input 
-                    type="number" 
-                    value={formData.power}
-                    onChange={e => setFormData({...formData, power: parseFloat(e.target.value)})}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
-                  />
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Power Output (dBm)</label>
+                  <input type="number" value={formData.power} onChange={e => setFormData({...formData, power: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl" />
                 </div>
               )}
-
               <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Splitter Ratio</label>
-                <select 
-                  value={formData.ratio}
-                  onChange={e => setFormData({...formData, ratio: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
-                >
+                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Splitter Ratio</label>
+                <select value={formData.ratio} onChange={e => setFormData({...formData, ratio: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
                   <option value="1">No Splitter (1:1)</option>
                   <option value="2">1:2 (-3.5 dB)</option>
                   <option value="4">1:4 (-7.2 dB)</option>
@@ -395,42 +308,25 @@ export default function Home() {
                   <option value="unbalanced">PLC Unbalanced (2 Output)</option>
                 </select>
               </div>
-
               {formData.ratio === 'unbalanced' && (
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Unbalanced Ratio (%)</label>
-                  <select 
-                    value={formData.percentage}
-                    onChange={e => setFormData({...formData, percentage: parseInt(e.target.value)})}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
-                  >
-                    {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50].map(p => (
-                      <option key={p} value={p}>{p < 10 ? `0${p}` : p}:{100-p}</option>
-                    ))}
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Unbalanced Ratio (%)</label>
+                  <select value={formData.percentage} onChange={e => setFormData({...formData, percentage: parseInt(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50].map(p => (<option key={p} value={p}>{p < 10 ? `0${p}` : p}:{100-p}</option>))}
                   </select>
                 </div>
               )}
-
               {editingNode?.type !== 'olt' && (
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5 md:mb-2">Distance from Parent (km)</label>
-                  <input 
-                    type="number" 
-                    value={formData.distance}
-                    onChange={e => setFormData({...formData, distance: parseFloat(e.target.value)})}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary"
-                  />
-                  <p className="text-[10px] md:text-xs text-slate-400 mt-1">Cable Loss: -{(formData.distance * LOSS_PER_KM).toFixed(2)} dB</p>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Distance (km)</label>
+                  <input type="number" value={formData.distance} onChange={e => setFormData({...formData, distance: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl" />
                 </div>
               )}
             </div>
-
-            <div className="flex gap-4 mt-8">
-              <button onClick={() => setIsModalOpen(false)} className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition-colors">Cancel</button>
-              {editingNode?.type !== 'olt' && (
-                <button onClick={deleteNode} className="px-6 py-3 bg-danger/10 text-danger font-bold rounded-xl hover:bg-danger/20 transition-colors">Delete</button>
-              )}
-              <button onClick={saveNode} className="flex-1 px-6 py-3 bg-primary text-white font-bold rounded-xl hover:bg-primary-dark transition-colors shadow-lg shadow-primary/20">Save</button>
+            <div className="flex gap-3 mt-8">
+              <button onClick={() => setIsModalOpen(false)} className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl">Cancel</button>
+              {editingNode?.type !== 'olt' && (<button onClick={deleteNode} className="px-6 py-3 bg-danger/10 text-danger font-bold rounded-xl"><X className="w-5 h-5"/></button>)}
+              <button onClick={saveNode} className="flex-1 px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-lg">Save</button>
             </div>
           </div>
         </div>
@@ -441,16 +337,11 @@ export default function Home() {
 
 function SummaryCard({ Icon, title, value, unit, color }: { Icon: LucideIcon, title: string, value: string, unit: string, color: string }) {
   return (
-    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 md:p-4 flex items-center gap-3 md:gap-4 shadow-sm">
-      <div className={`p-2.5 md:p-3 bg-white rounded-xl shadow-sm ${color}`}>
-        <Icon className="w-4 h-4 md:w-6 md:h-6" />
-      </div>
-      <div className="flex flex-col min-w-0">
-        <span className="text-[7px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">{title}</span>
-        <div className="flex items-baseline gap-0.5">
-          <span className="text-sm md:text-xl font-black text-slate-800 truncate">{value}</span>
-          <span className="text-[8px] md:text-xs font-bold text-slate-500">{unit}</span>
-        </div>
+    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 md:p-4 flex items-center gap-3 shadow-sm">
+      <div className={`p-2.5 md:p-3 bg-white rounded-xl shadow-sm ${color}`}><Icon className="w-4 h-4 md:w-6 md:h-6" /></div>
+      <div className="flex flex-col">
+        <span className="text-[7px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</span>
+        <div className="flex items-baseline gap-0.5"><span className="text-sm md:text-xl font-black text-slate-800">{value}</span><span className="text-[8px] md:text-xs font-bold text-slate-500">{unit}</span></div>
       </div>
     </div>
   );

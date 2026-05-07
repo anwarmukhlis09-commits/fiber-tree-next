@@ -24,31 +24,35 @@ export const RATIO_LOSS: Record<number, number> = {
 
 export function calculateAllLosses(node: FiberNode, parentPower: number = 8): void {
   const cableLoss = node.distance * LOSS_PER_KM;
+  
+  // Power arriving at this node after cable loss
+  const powerAtInput = node.type === 'olt' ? (node.power ?? 8) : (parentPower - cableLoss);
 
-  if (node.type === 'olt') {
-    node.currentPower = node.power ?? 8;
+  if (node.type === 'splitter' && node.ratio !== 'unbalanced' && typeof node.ratio === 'number') {
+    // For balanced splitter, display the OUTPUT power
+    const splitLoss = RATIO_LOSS[node.ratio] || 0;
+    node.currentPower = powerAtInput - splitLoss;
   } else {
-    node.currentPower = parentPower - cableLoss;
+    // For OLT or PLC Splitter (PLC handles loss in children), display the INPUT power
+    node.currentPower = powerAtInput;
   }
 
   if (node.children && node.children.length > 0) {
     if (node.ratio === 'unbalanced') {
       const p = node.percentage || 0;
-
       if (p === 0) {
         if (node.children[0]) calculateAllLosses(node.children[0], node.currentPower);
         if (node.children[1]) calculateAllLosses(node.children[1], -99);
       } else {
         const loss1 = -10 * Math.log10(p / 100) + 0.5;
         const loss2 = -10 * Math.log10((100 - p) / 100) + 0.5;
-
         if (node.children[0]) calculateAllLosses(node.children[0], node.currentPower - loss1);
         if (node.children[1]) calculateAllLosses(node.children[1], node.currentPower - loss2);
       }
     } else {
-      const splitLoss = RATIO_LOSS[node.ratio as number] || 0;
+      // Children of balanced splitter receive the already-calculated output power
       node.children.forEach((child) => {
-        calculateAllLosses(child, node.currentPower - splitLoss);
+        calculateAllLosses(child, node.currentPower);
       });
     }
   }
