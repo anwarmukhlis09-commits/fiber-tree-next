@@ -153,10 +153,8 @@ export default function Home() {
     const drawLink = (node: FiberNode) => {
       const parentEl = document.getElementById(`node-${node.id}`);
       if (!parentEl || !node.children) return;
-
       const parentNodeVisual = parentEl.querySelector(':scope > .node');
       if (!parentNodeVisual) return;
-
       const pRect = parentNodeVisual.getBoundingClientRect();
       const pX = (pRect.left + pRect.width / 2 - svgRect.left) / zoom;
       const pY = (pRect.bottom - svgRect.top) / zoom;
@@ -166,11 +164,9 @@ export default function Home() {
         if (!childEl) return;
         const childNodeVisual = childEl.querySelector(':scope > .node');
         if (!childNodeVisual) return;
-
         const cRect = childNodeVisual.getBoundingClientRect();
         const cX = (cRect.left + cRect.width / 2 - svgRect.left) / zoom;
         const cY = (cRect.top - svgRect.top) / zoom;
-
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         const cpY = (pY + cY) / 2;
         const d = `M ${pX} ${pY} C ${pX} ${cpY}, ${cX} ${cpY}, ${cX} ${cY}`;
@@ -186,7 +182,6 @@ export default function Home() {
   }, [treeData, zoom]);
 
   useEffect(() => {
-    // Initial draw and trigger on changes
     requestAnimationFrame(drawConnections);
     window.addEventListener('resize', drawConnections);
     return () => { window.removeEventListener('resize', drawConnections); };
@@ -246,6 +241,8 @@ export default function Home() {
     return { totalDist, totalSplitters, worstPower };
   })();
 
+  const powerPercent = Math.min(100, Math.max(0, ((summaryData.worstPower + 35) / 45) * 100));
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans touch-none">
       <header className="bg-white border-b border-slate-200 px-4 md:px-8 py-3 md:py-4 flex justify-between items-center z-50 shadow-sm">
@@ -298,6 +295,22 @@ export default function Home() {
             <SummaryCard Icon={MapPin} title="Max Distance" value={`${summaryData.totalDist.toFixed(1)}`} unit="km" color="text-blue-500" />
             <SummaryCard Icon={GitBranch} title="Splitters" value={`${summaryData.totalSplitters}`} unit="pcs" color="text-indigo-500" />
             <SummaryCard Icon={Activity} title="Worst Loss" value={`${summaryData.worstPower.toFixed(1)}`} unit="dBm" color={summaryData.worstPower > -20 ? 'text-success' : summaryData.worstPower > -27 ? 'text-warning' : 'text-danger'} />
+          </div>
+          
+          <div className="px-1 md:px-2 mt-1">
+            <div className="flex justify-between items-center mb-1.5 text-[8px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">
+              <span>Low Signal (-35)</span>
+              <span className="text-slate-800 font-extrabold bg-slate-100 px-2 py-0.5 rounded-full">Worst: {summaryData.worstPower.toFixed(1)} dBm</span>
+              <span>High Signal (10)</span>
+            </div>
+            <div className="h-1.5 md:h-2.5 bg-slate-100 rounded-full overflow-hidden">
+              <div 
+                className={`h-full transition-all duration-700 ease-out ${
+                  summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_12px_rgba(16,185,129,0.4)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_12px_rgba(250,204,21,0.4)]' : 'bg-danger shadow-[0_0_12px_rgba(239,68,68,0.4)]'
+                }`}
+                style={{ width: `${powerPercent}%` }}
+              />
+            </div>
           </div>
         </div>
       </footer>
