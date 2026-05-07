@@ -148,28 +148,38 @@ export default function Home() {
     if (!svgRef.current) return;
     const svg = svgRef.current;
     svg.innerHTML = '';
+    
+    // Get the SVG's actual position on screen
     const svgRect = svg.getBoundingClientRect();
 
     const drawLink = (node: FiberNode) => {
       const parentEl = document.getElementById(`node-${node.id}`);
       if (!parentEl || !node.children) return;
+
       const parentNodeVisual = parentEl.querySelector(':scope > .node');
       if (!parentNodeVisual) return;
+
       const pRect = parentNodeVisual.getBoundingClientRect();
-      const pX = (pRect.left + pRect.width / 2 - svgRect.left) / zoom;
-      const pY = (pRect.bottom - svgRect.top) / zoom;
+      
+      // Calculate coordinates relative to the SVG container top-left
+      // We use Math.round to avoid sub-pixel shakiness
+      const pX = Math.round((pRect.left + pRect.width / 2 - svgRect.left) / zoom);
+      const pY = Math.round((pRect.bottom - svgRect.top) / zoom);
 
       node.children.forEach(child => {
         const childEl = document.getElementById(`node-${child.id}`);
         if (!childEl) return;
         const childNodeVisual = childEl.querySelector(':scope > .node');
         if (!childNodeVisual) return;
+
         const cRect = childNodeVisual.getBoundingClientRect();
-        const cX = (cRect.left + cRect.width / 2 - svgRect.left) / zoom;
-        const cY = (cRect.top - svgRect.top) / zoom;
+        const cX = Math.round((cRect.left + cRect.width / 2 - svgRect.left) / zoom);
+        const cY = Math.round((cRect.top - svgRect.top) / zoom);
+
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         const cpY = (pY + cY) / 2;
         const d = `M ${pX} ${pY} C ${pX} ${cpY}, ${cX} ${cpY}, ${cX} ${cY}`;
+        
         path.setAttribute("d", d);
         path.setAttribute("stroke", "#94a3b8");
         path.setAttribute("stroke-width", "2");
@@ -182,11 +192,14 @@ export default function Home() {
   }, [treeData, zoom]);
 
   useEffect(() => {
+    // Initial draw and setup resize listener
+    const handleResize = () => requestAnimationFrame(drawConnections);
     requestAnimationFrame(drawConnections);
-    window.addEventListener('resize', drawConnections);
-    return () => { window.removeEventListener('resize', drawConnections); };
+    window.addEventListener('resize', handleResize);
+    return () => { window.removeEventListener('resize', handleResize); };
   }, [drawConnections]);
 
+  // Pinch-to-Zoom Helper
   const getTouchDist = (touches: React.TouchList) => {
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
@@ -212,6 +225,7 @@ export default function Home() {
     }
   };
 
+  // Pointer Events (Mouse/Single Finger Pan)
   const onPointerDown = (e: React.PointerEvent) => {
     if (isPinching.current) return;
     if ((e.target as HTMLElement).closest('.node') || (e.target as HTMLElement).closest('button')) return;
@@ -273,10 +287,11 @@ export default function Home() {
           className="absolute inset-0 flex items-start justify-center pt-20 transition-transform duration-75 ease-out origin-center"
           style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
         >
+          {/* Simplified SVG: No more absolute positioning hacks, just full size */}
           <svg 
             ref={svgRef} 
             className="absolute pointer-events-none z-0" 
-            style={{ width: '10000px', height: '10000px', left: '50%', top: '0', transform: 'translateX(-50%)' }}
+            style={{ width: '5000px', height: '5000px', left: '-2500px', top: '0' }}
           />
           <div className="relative z-10">
             <TreeNode node={treeData} onNodeClick={handleNodeClick} onAddChild={addChild} />
@@ -296,7 +311,6 @@ export default function Home() {
             <SummaryCard Icon={GitBranch} title="Splitters" value={`${summaryData.totalSplitters}`} unit="pcs" color="text-indigo-500" />
             <SummaryCard Icon={Activity} title="Worst Loss" value={`${summaryData.worstPower.toFixed(1)}`} unit="dBm" color={summaryData.worstPower > -20 ? 'text-success' : summaryData.worstPower > -27 ? 'text-warning' : 'text-danger'} />
           </div>
-          
           <div className="px-1 md:px-2 mt-1">
             <div className="flex justify-between items-center mb-1.5 text-[8px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">
               <span>Low Signal (-35)</span>
@@ -304,12 +318,7 @@ export default function Home() {
               <span>High Signal (10)</span>
             </div>
             <div className="h-1.5 md:h-2.5 bg-slate-100 rounded-full overflow-hidden">
-              <div 
-                className={`h-full transition-all duration-700 ease-out ${
-                  summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_12px_rgba(16,185,129,0.4)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_12px_rgba(250,204,21,0.4)]' : 'bg-danger shadow-[0_0_12px_rgba(239,68,68,0.4)]'
-                }`}
-                style={{ width: `${powerPercent}%` }}
-              />
+              <div className={`h-full transition-all duration-700 ease-out ${summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_12px_rgba(16,185,129,0.4)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_12px_rgba(250,204,21,0.4)]' : 'bg-danger shadow-[0_0_12px_rgba(239,68,68,0.4)]'}`} style={{ width: `${powerPercent}%` }} />
             </div>
           </div>
         </div>
