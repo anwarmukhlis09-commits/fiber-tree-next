@@ -106,10 +106,9 @@ export default function Home() {
         const newNode = { ...root };
         newNode.name = formData.name;
         newNode.distance = formData.distance;
-        
         if (newNode.type === 'olt') {
           newNode.power = formData.power;
-          newNode.ratio = 1; // Transmitter is always 1:1
+          newNode.ratio = 1;
         } else {
           const newRatio = formData.ratio === 'unbalanced' ? 'unbalanced' : parseInt(formData.ratio);
           if (newRatio === 'unbalanced' && newNode.ratio !== 'unbalanced') {
@@ -154,6 +153,7 @@ export default function Home() {
     const drawLink = (node: FiberNode) => {
       const parentEl = document.getElementById(`node-${node.id}`);
       if (!parentEl || !node.children) return;
+
       const parentNodeVisual = parentEl.querySelector(':scope > .node');
       if (!parentNodeVisual) return;
 
@@ -166,14 +166,17 @@ export default function Home() {
         if (!childEl) return;
         const childNodeVisual = childEl.querySelector(':scope > .node');
         if (!childNodeVisual) return;
+
         const cRect = childNodeVisual.getBoundingClientRect();
         const cX = (cRect.left + cRect.width / 2 - svgRect.left) / zoom;
         const cY = (cRect.top - svgRect.top) / zoom;
+
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const d = `M ${pX} ${pY} C ${pX} ${(pY + cY) / 2}, ${cX} ${(pY + cY) / 2}, ${cX} ${cY}`;
+        const cpY = (pY + cY) / 2;
+        const d = `M ${pX} ${pY} C ${pX} ${cpY}, ${cX} ${cpY}, ${cX} ${cY}`;
         path.setAttribute("d", d);
         path.setAttribute("stroke", "#94a3b8");
-        path.setAttribute("stroke-width", "2.5");
+        path.setAttribute("stroke-width", "2");
         path.setAttribute("fill", "none");
         svg.appendChild(path);
         drawLink(child);
@@ -183,9 +186,10 @@ export default function Home() {
   }, [treeData, zoom]);
 
   useEffect(() => {
-    const timer = setTimeout(drawConnections, 150);
+    // Initial draw and trigger on changes
+    requestAnimationFrame(drawConnections);
     window.addEventListener('resize', drawConnections);
-    return () => { clearTimeout(timer); window.removeEventListener('resize', drawConnections); };
+    return () => { window.removeEventListener('resize', drawConnections); };
   }, [drawConnections]);
 
   const getTouchDist = (touches: React.TouchList) => {
@@ -209,7 +213,7 @@ export default function Home() {
       const delta = dist / lastTouchDist.current;
       setZoom(prev => Math.min(3, Math.max(0.1, prev * (1 + (delta - 1) * 0.8))));
       lastTouchDist.current = dist;
-      setTimeout(drawConnections, 50);
+      requestAnimationFrame(drawConnections);
     }
   };
 
@@ -260,8 +264,12 @@ export default function Home() {
       <main 
         ref={containerRef}
         className="flex-1 relative overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px] cursor-grab active:cursor-grabbing"
-        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={() => isDragging.current = false}
-        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={() => { lastTouchDist.current = null; isPinching.current = false; }}
+        onPointerDown={onPointerDown} 
+        onPointerMove={onPointerMove} 
+        onPointerUp={() => isDragging.current = false}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={() => { lastTouchDist.current = null; isPinching.current = false; }}
       >
         <div 
           ref={canvasRef}
@@ -279,7 +287,7 @@ export default function Home() {
         </div>
 
         <div className="absolute right-4 md:right-8 top-4 md:top-8 flex flex-col gap-2 md:gap-4 z-40">
-          <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(drawConnections, 100); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Maximize className="w-5 h-5 md:w-6 md:h-6" /></button>
+          <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(() => requestAnimationFrame(drawConnections), 100); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Maximize className="w-5 h-5 md:w-6 md:h-6" /></button>
         </div>
       </main>
 
