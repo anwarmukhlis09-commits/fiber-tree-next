@@ -4,8 +4,9 @@ export interface FiberNode {
   id: string;
   name: string;
   type: NodeType;
-  power?: number; // Only for OLT
-  currentPower: number;
+  power?: number; // Only for OLT (TX Power)
+  inputPower: number; // Received power before split
+  currentPower: number; // Output power after split
   distance: number;
   ratio: number | 'unbalanced';
   percentage?: number; // Only for unbalanced
@@ -27,13 +28,14 @@ export function calculateAllLosses(node: FiberNode, parentPower: number = 8): vo
   
   // Power arriving at this node's input
   const powerAtInput = node.type === 'olt' ? (node.power ?? 8) : (parentPower - cableLoss);
+  node.inputPower = powerAtInput;
 
-  // If a balanced ratio is set (not 1), calculate and show the OUTPUT power
-  if (node.ratio !== 'unbalanced' && typeof node.ratio === 'number' && node.ratio > 1) {
+  // Calculate Output Power
+  if (node.type === 'splitter' && node.ratio !== 'unbalanced' && typeof node.ratio === 'number' && node.ratio > 1) {
     const splitLoss = RATIO_LOSS[node.ratio] || 0;
     node.currentPower = powerAtInput - splitLoss;
   } else {
-    // For ratio 1 (no splitter) or PLC (PLC handles loss in children), show the input power
+    // For ratio 1 or OLT or PLC (PLC handles loss in children), output = input
     node.currentPower = powerAtInput;
   }
 
@@ -50,7 +52,7 @@ export function calculateAllLosses(node: FiberNode, parentPower: number = 8): vo
         if (node.children[1]) calculateAllLosses(node.children[1], node.currentPower - loss2);
       }
     } else {
-      // Children of balanced splitter receive the already-calculated output power
+      // Children receive the output power of this node
       node.children.forEach((child) => {
         calculateAllLosses(child, node.currentPower);
       });

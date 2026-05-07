@@ -23,6 +23,7 @@ const initialData: FiberNode = {
   name: 'Transmitter',
   type: 'olt',
   power: 8,
+  inputPower: 8,
   currentPower: 8,
   distance: 0,
   ratio: 1,
@@ -84,6 +85,7 @@ export default function Home() {
           name: `SPL-${root.name.split('-')[1] || ''}.${root.children.length + 1}`,
           type: 'splitter',
           ratio: 1,
+          inputPower: 0,
           currentPower: 0,
           distance: 1,
           children: []
@@ -104,18 +106,23 @@ export default function Home() {
         const newNode = { ...root };
         newNode.name = formData.name;
         newNode.distance = formData.distance;
-        if (newNode.type === 'olt') newNode.power = formData.power;
-        const newRatio = formData.ratio === 'unbalanced' ? 'unbalanced' : parseInt(formData.ratio);
-        if (newRatio === 'unbalanced' && newNode.ratio !== 'unbalanced') {
-          newNode.ratio = 'unbalanced';
-          newNode.children = [
-            { id: Math.random().toString(36).substr(2, 9), name: 'Drop', type: 'splitter', ratio: 1, currentPower: 0, distance: 0, children: [] },
-            { id: Math.random().toString(36).substr(2, 9), name: 'Through', type: 'splitter', ratio: 1, currentPower: 0, distance: 0.1, children: [] }
-          ];
+        
+        if (newNode.type === 'olt') {
+          newNode.power = formData.power;
+          newNode.ratio = 1; // Transmitter is always 1:1
         } else {
-          newNode.ratio = newRatio;
+          const newRatio = formData.ratio === 'unbalanced' ? 'unbalanced' : parseInt(formData.ratio);
+          if (newRatio === 'unbalanced' && newNode.ratio !== 'unbalanced') {
+            newNode.ratio = 'unbalanced';
+            newNode.children = [
+              { id: Math.random().toString(36).substr(2, 9), name: 'Drop', type: 'splitter', ratio: 1, inputPower: 0, currentPower: 0, distance: 0, children: [] },
+              { id: Math.random().toString(36).substr(2, 9), name: 'Through', type: 'splitter', ratio: 1, inputPower: 0, currentPower: 0, distance: 0.1, children: [] }
+            ];
+          } else {
+            newNode.ratio = newRatio;
+          }
+          if (newNode.ratio === 'unbalanced') newNode.percentage = formData.percentage;
         }
-        if (newNode.ratio === 'unbalanced') newNode.percentage = formData.percentage;
         return newNode;
       }
       return { ...root, children: root.children.map(updateTree) };
@@ -147,7 +154,6 @@ export default function Home() {
     const drawLink = (node: FiberNode) => {
       const parentEl = document.getElementById(`node-${node.id}`);
       if (!parentEl || !node.children) return;
-
       const parentNodeVisual = parentEl.querySelector(':scope > .node');
       if (!parentNodeVisual) return;
 
@@ -160,11 +166,9 @@ export default function Home() {
         if (!childEl) return;
         const childNodeVisual = childEl.querySelector(':scope > .node');
         if (!childNodeVisual) return;
-
         const cRect = childNodeVisual.getBoundingClientRect();
         const cX = (cRect.left + cRect.width / 2 - svgRect.left) / zoom;
         const cY = (cRect.top - svgRect.top) / zoom;
-
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
         const d = `M ${pX} ${pY} C ${pX} ${(pY + cY) / 2}, ${cX} ${(pY + cY) / 2}, ${cX} ${cY}`;
         path.setAttribute("d", d);
@@ -184,7 +188,6 @@ export default function Home() {
     return () => { clearTimeout(timer); window.removeEventListener('resize', drawConnections); };
   }, [drawConnections]);
 
-  // Pinch-to-Zoom Helper
   const getTouchDist = (touches: React.TouchList) => {
     const dx = touches[0].clientX - touches[1].clientX;
     const dy = touches[0].clientY - touches[1].clientY;
@@ -194,31 +197,22 @@ export default function Home() {
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       isPinching.current = true;
-      isDragging.current = false; // Disable panning when pinching
+      isDragging.current = false;
       lastTouchDist.current = getTouchDist(e.touches);
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 2 && lastTouchDist.current !== null) {
-      e.preventDefault(); // Prevent browser zoom
+      e.preventDefault();
       const dist = getTouchDist(e.touches);
       const delta = dist / lastTouchDist.current;
-      
-      // Apply zoom with a slight damping factor for stability
       setZoom(prev => Math.min(3, Math.max(0.1, prev * (1 + (delta - 1) * 0.8))));
-      
       lastTouchDist.current = dist;
       setTimeout(drawConnections, 50);
     }
   };
 
-  const handleTouchEnd = () => {
-    lastTouchDist.current = null;
-    isPinching.current = false;
-  };
-
-  // Pointer Events (Mouse/Single Finger Pan)
   const onPointerDown = (e: React.PointerEvent) => {
     if (isPinching.current) return;
     if ((e.target as HTMLElement).closest('.node') || (e.target as HTMLElement).closest('button')) return;
@@ -233,11 +227,6 @@ export default function Home() {
     const dy = e.clientY - lastPos.current.y;
     setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
     lastPos.current = { x: e.clientX, y: e.clientY };
-  };
-
-  const handleZoom = (delta: number) => {
-    setZoom(prev => Math.min(3, Math.max(0.1, prev + delta)));
-    setTimeout(drawConnections, 100);
   };
 
   const summaryData = (() => {
@@ -271,12 +260,8 @@ export default function Home() {
       <main 
         ref={containerRef}
         className="flex-1 relative overflow-hidden bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px] cursor-grab active:cursor-grabbing"
-        onPointerDown={onPointerDown} 
-        onPointerMove={onPointerMove} 
-        onPointerUp={() => isDragging.current = false}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={() => isDragging.current = false}
+        onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={() => { lastTouchDist.current = null; isPinching.current = false; }}
       >
         <div 
           ref={canvasRef}
@@ -293,10 +278,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Updated Zoom Controls: Hidden +/- on Mobile */}
         <div className="absolute right-4 md:right-8 top-4 md:top-8 flex flex-col gap-2 md:gap-4 z-40">
-          <button onClick={() => handleZoom(0.2)} className="hidden md:flex w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl items-center justify-center shadow-xl active:scale-90"><Plus className="w-5 h-5 md:w-6 md:h-6" /></button>
-          <button onClick={() => handleZoom(-0.2)} className="hidden md:flex w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl items-center justify-center shadow-xl active:scale-90"><Minus className="w-5 h-5 md:w-6 md:h-6" /></button>
           <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(drawConnections, 100); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Maximize className="w-5 h-5 md:w-6 md:h-6" /></button>
         </div>
       </main>
@@ -308,16 +290,6 @@ export default function Home() {
             <SummaryCard Icon={MapPin} title="Max Distance" value={`${summaryData.totalDist.toFixed(1)}`} unit="km" color="text-blue-500" />
             <SummaryCard Icon={GitBranch} title="Splitters" value={`${summaryData.totalSplitters}`} unit="pcs" color="text-indigo-500" />
             <SummaryCard Icon={Activity} title="Worst Loss" value={`${summaryData.worstPower.toFixed(1)}`} unit="dBm" color={summaryData.worstPower > -20 ? 'text-success' : summaryData.worstPower > -27 ? 'text-warning' : 'text-danger'} />
-          </div>
-          <div className="px-1 md:px-2 mt-1">
-            <div className="flex justify-between items-center mb-1.5 text-[8px] md:text-xs font-bold text-slate-400 uppercase tracking-widest">
-              <span>Low Signal (-35)</span>
-              <span className="text-slate-800 font-extrabold bg-slate-100 px-2 py-0.5 rounded-full">Worst: {summaryData.worstPower.toFixed(1)} dBm</span>
-              <span>High Signal (10)</span>
-            </div>
-            <div className="h-1.5 md:h-2.5 bg-slate-100 rounded-full overflow-hidden">
-              <div className={`h-full transition-all duration-700 ease-out ${summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_8px_rgba(250,204,21,0.5)]' : 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} style={{ width: `${Math.min(100, Math.max(0, ((summaryData.worstPower + 35) / 45) * 100))}%` }} />
-            </div>
           </div>
         </div>
       </footer>
@@ -334,37 +306,38 @@ export default function Home() {
                 <label className="block text-sm font-semibold text-slate-600 mb-1.5">Node Name</label>
                 <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary" />
               </div>
-              {editingNode?.type === 'olt' && (
+              {editingNode?.type === 'olt' ? (
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Power Output (dBm)</label>
+                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Power Output (TX dBm)</label>
                   <input type="number" value={formData.power} onChange={e => setFormData({...formData, power: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl" />
                 </div>
-              )}
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Splitter Ratio</label>
-                <select value={formData.ratio} onChange={e => setFormData({...formData, ratio: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
-                  <option value="1">No Splitter (1:1)</option>
-                  <option value="2">1:2 (-3.5 dB)</option>
-                  <option value="4">1:4 (-7.2 dB)</option>
-                  <option value="8">1:8 (-10.5 dB)</option>
-                  <option value="16">1:16 (-13.8 dB)</option>
-                  <option value="32">1:32 (-17.1 dB)</option>
-                  <option value="unbalanced">PLC Unbalanced (2 Output)</option>
-                </select>
-              </div>
-              {formData.ratio === 'unbalanced' && (
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Unbalanced Ratio (%)</label>
-                  <select value={formData.percentage} onChange={e => setFormData({...formData, percentage: parseInt(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
-                    {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50].map(p => (<option key={p} value={p}>{p < 10 ? `0${p}` : p}:{100-p}</option>))}
-                  </select>
-                </div>
-              )}
-              {editingNode?.type !== 'olt' && (
-                <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Distance (km)</label>
-                  <input type="number" value={formData.distance} onChange={e => setFormData({...formData, distance: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl" />
-                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Splitter Ratio</label>
+                    <select value={formData.ratio} onChange={e => setFormData({...formData, ratio: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <option value="1">No Splitter (1:1)</option>
+                      <option value="2">1:2 (-3.5 dB)</option>
+                      <option value="4">1:4 (-7.2 dB)</option>
+                      <option value="8">1:8 (-10.5 dB)</option>
+                      <option value="16">1:16 (-13.8 dB)</option>
+                      <option value="32">1:32 (-17.1 dB)</option>
+                      <option value="unbalanced">PLC Unbalanced (2 Output)</option>
+                    </select>
+                  </div>
+                  {formData.ratio === 'unbalanced' && (
+                    <div>
+                      <label className="block text-sm font-semibold text-slate-600 mb-1.5">Unbalanced Ratio (%)</label>
+                      <select value={formData.percentage} onChange={e => setFormData({...formData, percentage: parseInt(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
+                        {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50].map(p => (<option key={p} value={p}>{p < 10 ? `0${p}` : p}:{100-p}</option>))}
+                      </select>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Distance (km)</label>
+                    <input type="number" value={formData.distance} onChange={e => setFormData({...formData, distance: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl" />
+                  </div>
+                </>
               )}
             </div>
             <div className="flex gap-3 mt-8">
@@ -383,8 +356,8 @@ function SummaryCard({ Icon, title, value, unit, color }: { Icon: LucideIcon, ti
   return (
     <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 md:p-4 flex items-center gap-3 shadow-sm">
       <div className={`p-2.5 md:p-3 bg-white rounded-xl shadow-sm ${color}`}><Icon className="w-4 h-4 md:w-6 md:h-6" /></div>
-      <div className="flex flex-col">
-        <span className="text-[7px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{title}</span>
+      <div className="flex flex-col min-w-0">
+        <span className="text-[7px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1 truncate">{title}</span>
         <div className="flex items-baseline gap-0.5"><span className="text-sm md:text-xl font-black text-slate-800">{value}</span><span className="text-[8px] md:text-xs font-bold text-slate-500">{unit}</span></div>
       </div>
     </div>
