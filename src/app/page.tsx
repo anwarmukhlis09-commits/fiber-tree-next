@@ -49,6 +49,7 @@ export default function Home() {
   const isDragging = useRef(false);
   const lastPos = useRef({ x: 0, y: 0 });
   const lastTouchDist = useRef<number | null>(null);
+  const isPinching = useRef(false);
 
   useEffect(() => {
     const newData = { ...treeData };
@@ -192,15 +193,21 @@ export default function Home() {
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (e.touches.length === 2) {
+      isPinching.current = true;
+      isDragging.current = false; // Disable panning when pinching
       lastTouchDist.current = getTouchDist(e.touches);
     }
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
     if (e.touches.length === 2 && lastTouchDist.current !== null) {
+      e.preventDefault(); // Prevent browser zoom
       const dist = getTouchDist(e.touches);
       const delta = dist / lastTouchDist.current;
-      setZoom(prev => Math.min(3, Math.max(0.1, prev * delta)));
+      
+      // Apply zoom with a slight damping factor for stability
+      setZoom(prev => Math.min(3, Math.max(0.1, prev * (1 + (delta - 1) * 0.8))));
+      
       lastTouchDist.current = dist;
       setTimeout(drawConnections, 50);
     }
@@ -208,10 +215,12 @@ export default function Home() {
 
   const handleTouchEnd = () => {
     lastTouchDist.current = null;
+    isPinching.current = false;
   };
 
   // Pointer Events (Mouse/Single Finger Pan)
   const onPointerDown = (e: React.PointerEvent) => {
+    if (isPinching.current) return;
     if ((e.target as HTMLElement).closest('.node') || (e.target as HTMLElement).closest('button')) return;
     isDragging.current = true;
     lastPos.current = { x: e.clientX, y: e.clientY };
@@ -219,7 +228,7 @@ export default function Home() {
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
-    if (!isDragging.current) return;
+    if (!isDragging.current || isPinching.current) return;
     const dx = e.clientX - lastPos.current.x;
     const dy = e.clientY - lastPos.current.y;
     setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
@@ -284,10 +293,11 @@ export default function Home() {
           </div>
         </div>
 
+        {/* Updated Zoom Controls: Hidden +/- on Mobile */}
         <div className="absolute right-4 md:right-8 top-4 md:top-8 flex flex-col gap-2 md:gap-4 z-40">
-          <button onClick={() => handleZoom(0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Plus className="w-5 h-5" /></button>
-          <button onClick={() => handleZoom(-0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Minus className="w-5 h-5" /></button>
-          <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(drawConnections, 100); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Maximize className="w-5 h-5" /></button>
+          <button onClick={() => handleZoom(0.2)} className="hidden md:flex w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl items-center justify-center shadow-xl active:scale-90"><Plus className="w-5 h-5 md:w-6 md:h-6" /></button>
+          <button onClick={() => handleZoom(-0.2)} className="hidden md:flex w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl items-center justify-center shadow-xl active:scale-90"><Minus className="w-5 h-5 md:w-6 md:h-6" /></button>
+          <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(drawConnections, 100); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Maximize className="w-5 h-5 md:w-6 md:h-6" /></button>
         </div>
       </main>
 
