@@ -137,48 +137,40 @@ export default function Home() {
   };
 
   const drawConnections = useCallback(() => {
-    if (!svgRef.current || !canvasRef.current) return;
+    if (!svgRef.current) return;
     const svg = svgRef.current;
     svg.innerHTML = '';
     
-    // Get the untransformed canvas position
-    const canvasRect = canvasRef.current.getBoundingClientRect();
+    // Crucial: get current SVG position in the window
+    const svgRect = svg.getBoundingClientRect();
 
     const drawLink = (node: FiberNode) => {
       const parentEl = document.getElementById(`node-${node.id}`);
       if (!parentEl || !node.children) return;
 
-      const parentNodeVisual = parentEl.querySelector(':scope > div');
+      const parentNodeVisual = parentEl.querySelector(':scope > .node');
       if (!parentNodeVisual) return;
 
       const pRect = parentNodeVisual.getBoundingClientRect();
-      // Relative to canvas, accounting for current zoom
-      const pX = (pRect.left + pRect.right) / 2 - canvasRect.left;
-      const pY = pRect.bottom - canvasRect.top;
+      // Calculate coordinates relative to SVG top-left, adjusted by zoom
+      const pX = (pRect.left + pRect.width / 2 - svgRect.left) / zoom;
+      const pY = (pRect.bottom - svgRect.top) / zoom;
 
       node.children.forEach(child => {
         const childEl = document.getElementById(`node-${child.id}`);
         if (!childEl) return;
-        const childNodeVisual = childEl.querySelector(':scope > div');
+        const childNodeVisual = childEl.querySelector(':scope > .node');
         if (!childNodeVisual) return;
 
         const cRect = childNodeVisual.getBoundingClientRect();
-        const cX = (cRect.left + cRect.right) / 2 - canvasRect.left;
-        const cY = cRect.top - canvasRect.top;
-
-        // Since the SVG is INSIDE the zoomed container, we need to divide by zoom
-        // to get the "logical" coordinates that the CSS transform will then scale up.
-        const zPX = pX / zoom;
-        const zPY = pY / zoom;
-        const zCX = cX / zoom;
-        const zCY = cY / zoom;
+        const cX = (cRect.left + cRect.width / 2 - svgRect.left) / zoom;
+        const cY = (cRect.top - svgRect.top) / zoom;
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const d = `M ${zPX} ${zPY} C ${zPX} ${(zPY + zCY) / 2}, ${zCX} ${(zPY + zCY) / 2}, ${zCX} ${zCY}`;
+        const d = `M ${pX} ${pY} C ${pX} ${(pY + cY) / 2}, ${cX} ${(pY + cY) / 2}, ${cX} ${cY}`;
         path.setAttribute("d", d);
-        path.setAttribute("stroke", "#cbd5e1");
-        path.setAttribute("stroke-width", (2 / zoom).toString()); // Keep line width consistent visually? No, keep it fixed logic size
-        path.setAttribute("stroke-width", "2");
+        path.setAttribute("stroke", "#94a3b8"); // Slightly darker for better visibility
+        path.setAttribute("stroke-width", "2.5");
         path.setAttribute("fill", "none");
         svg.appendChild(path);
         drawLink(child);
@@ -188,7 +180,7 @@ export default function Home() {
   }, [treeData, zoom]);
 
   useEffect(() => {
-    const timer = setTimeout(drawConnections, 100);
+    const timer = setTimeout(drawConnections, 150); // Increased delay slightly
     window.addEventListener('resize', drawConnections);
     return () => { clearTimeout(timer); window.removeEventListener('resize', drawConnections); };
   }, [drawConnections]);
@@ -206,13 +198,25 @@ export default function Home() {
     const dy = e.clientY - lastPos.current.y;
     setOffset(prev => ({ x: prev.x + dx, y: prev.y + dy }));
     lastPos.current = { x: e.clientX, y: e.clientY };
-    // We don't necessarily need to redraw on every move if SVG is inside the transform
   };
 
   const handleZoom = (delta: number) => {
     setZoom(prev => Math.min(3, Math.max(0.1, prev + delta)));
-    setTimeout(drawConnections, 50);
+    setTimeout(drawConnections, 100);
   };
+
+  const summaryData = (() => {
+    let totalDist = 0; let totalSplitters = 0; let worstPower = treeData.power || 8;
+    const traverse = (node: FiberNode, currentDist: number) => {
+      const d = currentDist + node.distance;
+      totalDist = Math.max(totalDist, d);
+      if (node.ratio !== 1) totalSplitters++;
+      if (node.currentPower < worstPower) worstPower = node.currentPower;
+      node.children.forEach(c => traverse(c, d));
+    };
+    traverse(treeData, 0);
+    return { totalDist, totalSplitters, worstPower };
+  })();
 
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-sans touch-none">
@@ -239,11 +243,10 @@ export default function Home() {
           className="absolute inset-0 flex items-start justify-center pt-20 transition-transform duration-75 ease-out origin-center"
           style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
         >
-          {/* MOVED SVG INSIDE THE TRANSFORMED CONTAINER */}
           <svg 
             ref={svgRef} 
-            className="absolute inset-0 pointer-events-none z-0" 
-            style={{ width: '10000px', height: '10000px', left: '-5000px', top: '0' }}
+            className="absolute pointer-events-none z-0" 
+            style={{ width: '10000px', height: '10000px', left: '50%', top: '0', transform: 'translateX(-50%)' }}
           />
           <div className="relative z-10">
             <TreeNode node={treeData} onNodeClick={handleNodeClick} onAddChild={addChild} />
@@ -253,7 +256,7 @@ export default function Home() {
         <div className="absolute right-4 md:right-8 top-4 md:top-8 flex flex-col gap-2 md:gap-4 z-40">
           <button onClick={() => handleZoom(0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Plus className="w-5 h-5" /></button>
           <button onClick={() => handleZoom(-0.2)} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Minus className="w-5 h-5" /></button>
-          <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(drawConnections, 50); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Maximize className="w-5 h-5" /></button>
+          <button onClick={() => { setZoom(1); setOffset({ x: 0, y: 0 }); setTimeout(drawConnections, 100); }} className="w-10 h-10 md:w-14 md:h-14 bg-white/90 backdrop-blur border border-slate-200 rounded-xl flex items-center justify-center shadow-xl active:scale-90"><Maximize className="w-5 h-5" /></button>
         </div>
       </main>
 
@@ -272,7 +275,7 @@ export default function Home() {
               <span>High Signal (10)</span>
             </div>
             <div className="h-1.5 md:h-2.5 bg-slate-100 rounded-full overflow-hidden">
-              <div className={`h-full transition-all duration-700 ease-out ${summaryData.worstPower > -20 ? 'bg-success' : summaryData.worstPower > -27 ? 'bg-warning' : 'bg-danger'}`} style={{ width: `${Math.min(100, Math.max(0, ((summaryData.worstPower + 35) / 45) * 100))}%` }} />
+              <div className={`h-full transition-all duration-700 ease-out ${summaryData.worstPower > -20 ? 'bg-success shadow-[0_0_8px_rgba(16,185,129,0.5)]' : summaryData.worstPower > -27 ? 'bg-warning shadow-[0_0_8px_rgba(250,204,21,0.5)]' : 'bg-danger shadow-[0_0_8px_rgba(239,68,68,0.5)]'}`} style={{ width: `${Math.min(100, Math.max(0, ((summaryData.worstPower + 35) / 45) * 100))}%` }} />
             </div>
           </div>
         </div>
