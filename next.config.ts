@@ -5,8 +5,7 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true,
   },
-  basePath: '/fiber-tree-next',
-  assetPrefix: '/fiber-tree-next',
+  allowedDevOrigins: ['192.168.56.1', '192.168.56.1:3000', 'localhost', 'localhost:3000'],
 };
 
 export default nextConfig;
