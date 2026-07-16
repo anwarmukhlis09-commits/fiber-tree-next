@@ -65,3 +65,44 @@ export function getStatusClass(dbm: number): string {
   if (dbm > -27) return 'status-warning';
   return 'status-danger';
 }
+
+export function syncChildren(node: FiberNode): FiberNode {
+  let targetCount = 1; // Default to 1 child (point-to-point / daisy-chain)
+  if (node.ratio === 'unbalanced') targetCount = 2;
+  else if (typeof node.ratio === 'number' && node.ratio > 1) targetCount = node.ratio;
+
+  let newChildren = [...node.children];
+
+  if (newChildren.length < targetCount) {
+    for (let i = newChildren.length; i < targetCount; i++) {
+      let childName = '';
+      let childDistance = 1;
+      
+      if (node.ratio === 'unbalanced') {
+        childName = i === 0 ? 'Drop' : 'Through';
+        childDistance = i === 0 ? 0 : 0.1;
+      } else {
+        childName = `SPL-${node.name.split('-')[1] || ''}.${i + 1}`;
+        childDistance = 1;
+      }
+
+      newChildren.push({
+        id: Math.random().toString(36).substr(2, 9),
+        name: childName,
+        type: 'splitter',
+        ratio: 1,
+        inputPower: 0,
+        currentPower: 0,
+        distance: childDistance,
+        children: []
+      });
+    }
+  } else if (newChildren.length > targetCount) {
+    newChildren = newChildren.slice(0, targetCount);
+  }
+
+  return {
+    ...node,
+    children: newChildren
+  };
+}

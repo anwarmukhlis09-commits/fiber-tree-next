@@ -15,7 +15,7 @@ import {
   PlusCircle,
   LucideIcon
 } from 'lucide-react';
-import { FiberNode, calculateAllLosses, LOSS_PER_KM } from '@/lib/calculator';
+import { FiberNode, calculateAllLosses, LOSS_PER_KM, syncChildren } from '@/lib/calculator';
 import TreeNode from '@/components/TreeNode';
 
 const initialData: FiberNode = {
@@ -38,10 +38,10 @@ export default function Home() {
   const [editingNode, setEditingNode] = useState<FiberNode | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    power: 8,
-    ratio: '1' as any,
-    percentage: 50,
-    distance: 1
+    power: '8',
+    ratio: '1',
+    percentage: '50',
+    distance: '1'
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -52,14 +52,19 @@ export default function Home() {
   const lastTouchDist = useRef<number | null>(null);
   const isPinching = useRef(false);
 
-  useEffect(() => {
-    const newData = { ...treeData };
-    calculateAllLosses(newData, newData.power);
-  }, [treeData]);
-
   const handleReset = () => {
     if (confirm('Reset semua data?')) {
-      setTreeData(initialData);
+      setTreeData({
+        id: 'root',
+        name: 'Transmitter',
+        type: 'olt',
+        power: 8,
+        inputPower: 8,
+        currentPower: 8,
+        distance: 0,
+        ratio: 1,
+        children: []
+      });
       setZoom(1);
       setOffset({ x: 0, y: 0 });
     }
@@ -69,10 +74,10 @@ export default function Home() {
     setEditingNode(node);
     setFormData({
       name: node.name,
-      power: node.power || 8,
+      power: node.power !== undefined ? node.power.toString() : '8',
       ratio: node.ratio.toString(),
-      percentage: node.percentage || 50,
-      distance: node.distance
+      percentage: node.percentage !== undefined ? node.percentage.toString() : '50',
+      distance: node.distance.toString()
     });
     setIsModalOpen(true);
   };
@@ -103,25 +108,21 @@ export default function Home() {
     if (!editingNode) return;
     const updateTree = (root: FiberNode): FiberNode => {
       if (root.id === editingNode.id) {
-        const newNode = { ...root };
+        let newNode = { ...root };
         newNode.name = formData.name;
-        newNode.distance = formData.distance;
+        newNode.distance = parseFloat(formData.distance) || 0;
         if (newNode.type === 'olt') {
-          newNode.power = formData.power;
+          newNode.power = parseFloat(formData.power) || 0;
           newNode.ratio = 1;
         } else {
           const newRatio = formData.ratio === 'unbalanced' ? 'unbalanced' : parseInt(formData.ratio);
-          if (newRatio === 'unbalanced' && newNode.ratio !== 'unbalanced') {
-            newNode.ratio = 'unbalanced';
-            newNode.children = [
-              { id: Math.random().toString(36).substr(2, 9), name: 'Drop', type: 'splitter', ratio: 1, inputPower: 0, currentPower: 0, distance: 0, children: [] },
-              { id: Math.random().toString(36).substr(2, 9), name: 'Through', type: 'splitter', ratio: 1, inputPower: 0, currentPower: 0, distance: 0.1, children: [] }
-            ];
-          } else {
-            newNode.ratio = newRatio;
+          newNode.ratio = newRatio;
+          if (newNode.ratio === 'unbalanced') {
+            newNode.percentage = parseInt(formData.percentage) || 50;
           }
-          if (newNode.ratio === 'unbalanced') newNode.percentage = formData.percentage;
         }
+        // Automatically sync the children count with the selected splitter ratio
+        newNode = syncChildren(newNode);
         return newNode;
       }
       return { ...root, children: root.children.map(updateTree) };
@@ -199,6 +200,11 @@ export default function Home() {
     return () => { window.removeEventListener('resize', handleResize); };
   }, [drawConnections]);
 
+  // Trigger line redrawing when tree structure, zoom, or offset changes
+  useEffect(() => {
+    requestAnimationFrame(drawConnections);
+  }, [treeData, zoom, offset, drawConnections]);
+
   // Pinch-to-Zoom Helper
   const getTouchDist = (touches: React.TouchList) => {
     const dx = touches[0].clientX - touches[1].clientX;
@@ -248,7 +254,7 @@ export default function Home() {
       const d = currentDist + node.distance;
       totalDist = Math.max(totalDist, d);
       if (node.ratio !== 1) totalSplitters++;
-      if (node.currentPower < worstPower) worstPower = node.currentPower;
+      if (node.currentPower > -99 && node.currentPower < worstPower) worstPower = node.currentPower;
       node.children.forEach(c => traverse(c, d));
     };
     traverse(treeData, 0);
@@ -284,16 +290,16 @@ export default function Home() {
       >
         <div 
           ref={canvasRef}
-          className="absolute inset-0 flex items-start justify-center pt-20 transition-transform duration-75 ease-out origin-center"
+          className="absolute inset-0 flex items-start justify-center pt-20 origin-center"
           style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})` }}
         >
-          {/* Simplified SVG: No more absolute positioning hacks, just full size */}
-          <svg 
-            ref={svgRef} 
-            className="absolute pointer-events-none z-0" 
-            style={{ width: '5000px', height: '5000px', left: '-2500px', top: '0' }}
-          />
           <div className="relative z-10">
+            {/* SVG inside the tree container to ensure absolute alignment regardless of screen sizing */}
+            <svg 
+              ref={svgRef} 
+              className="absolute pointer-events-none z-0" 
+              style={{ width: '5000px', height: '5000px', left: '-2500px', top: '0' }}
+            />
             <TreeNode node={treeData} onNodeClick={handleNodeClick} onAddChild={addChild} />
           </div>
         </div>
@@ -326,54 +332,56 @@ export default function Home() {
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 md:p-8 shadow-2xl animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh]">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-slate-800">{editingNode?.type === 'olt' ? 'Transmitter Config' : 'Splitter Config'}</h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-6 h-6" /></button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-600 mb-1.5">Node Name</label>
-                <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary" />
+          <div className="bg-white w-full max-w-sm rounded-3xl p-5 md:p-6 shadow-2xl animate-in fade-in zoom-in duration-200 overflow-y-auto max-h-[90vh] flex flex-col justify-between">
+            <div>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold text-slate-800">{editingNode?.type === 'olt' ? 'Transmitter Config' : 'Splitter Config'}</h2>
+                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
               </div>
-              {editingNode?.type === 'olt' ? (
+              <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-semibold text-slate-600 mb-1.5">Power Output (TX dBm)</label>
-                  <input type="number" value={formData.power} onChange={e => setFormData({...formData, power: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl" />
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">Node Name</label>
+                  <input type="text" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:border-primary text-sm" />
                 </div>
-              ) : (
-                <>
+                {editingNode?.type === 'olt' ? (
                   <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Splitter Ratio</label>
-                    <select value={formData.ratio} onChange={e => setFormData({...formData, ratio: e.target.value})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
-                      <option value="1">No Splitter (1:1)</option>
-                      <option value="2">1:2 (-3.5 dB)</option>
-                      <option value="4">1:4 (-7.2 dB)</option>
-                      <option value="8">1:8 (-10.5 dB)</option>
-                      <option value="16">1:16 (-13.8 dB)</option>
-                      <option value="32">1:32 (-17.1 dB)</option>
-                      <option value="unbalanced">PLC Unbalanced (2 Output)</option>
-                    </select>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Power Output (TX dBm)</label>
+                    <input type="text" value={formData.power} onChange={e => setFormData({...formData, power: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
                   </div>
-                  {formData.ratio === 'unbalanced' && (
+                ) : (
+                  <>
                     <div>
-                      <label className="block text-sm font-semibold text-slate-600 mb-1.5">Unbalanced Ratio (%)</label>
-                      <select value={formData.percentage} onChange={e => setFormData({...formData, percentage: parseInt(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl">
-                        {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50].map(p => (<option key={p} value={p}>{p < 10 ? `0${p}` : p}:{100-p}</option>))}
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">Splitter Ratio</label>
+                      <select value={formData.ratio} onChange={e => setFormData({...formData, ratio: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                        <option value="1">No Splitter (1:1)</option>
+                        <option value="2">1:2 (-3.5 dB)</option>
+                        <option value="4">1:4 (-7.2 dB)</option>
+                        <option value="8">1:8 (-10.5 dB)</option>
+                        <option value="16">1:16 (-13.8 dB)</option>
+                        <option value="32">1:32 (-17.1 dB)</option>
+                        <option value="unbalanced">PLC Unbalanced (2 Output)</option>
                       </select>
                     </div>
-                  )}
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-600 mb-1.5">Distance (km)</label>
-                    <input type="number" value={formData.distance} onChange={e => setFormData({...formData, distance: parseFloat(e.target.value)})} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl" />
-                  </div>
-                </>
-              )}
+                    {formData.ratio === 'unbalanced' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-500 mb-1">Unbalanced Ratio (%)</label>
+                        <select value={formData.percentage} onChange={e => setFormData({...formData, percentage: parseInt(e.target.value)})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                          {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50].map(p => (<option key={p} value={p}>{p < 10 ? `0${p}` : p}:{100-p}</option>))}
+                        </select>
+                      </div>
+                    )}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">Distance (km)</label>
+                      <input type="text" value={formData.distance} onChange={e => setFormData({...formData, distance: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm" />
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="flex gap-3 mt-8">
-              <button onClick={() => setIsModalOpen(false)} className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 font-bold rounded-xl">Cancel</button>
-              {editingNode?.type !== 'olt' && (<button onClick={deleteNode} className="px-6 py-3 bg-danger/10 text-danger font-bold rounded-xl"><X className="w-5 h-5"/></button>)}
-              <button onClick={saveNode} className="flex-1 px-6 py-3 bg-primary text-white font-bold rounded-xl shadow-lg">Save</button>
+            <div className="flex gap-2.5 mt-6">
+              <button onClick={() => setIsModalOpen(false)} className="flex-1 py-2 px-4 bg-slate-100 text-slate-600 font-bold rounded-xl text-sm">Cancel</button>
+              {editingNode?.type !== 'olt' && (<button onClick={deleteNode} className="py-2 px-3 bg-danger/10 text-danger font-bold rounded-xl text-sm"><X className="w-5 h-5"/></button>)}
+              <button onClick={saveNode} className="flex-1 py-2 px-4 bg-primary text-white font-bold rounded-xl shadow-lg text-sm">Save</button>
             </div>
           </div>
         </div>
