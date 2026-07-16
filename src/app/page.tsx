@@ -149,37 +149,43 @@ export default function Home() {
     if (!svgRef.current) return;
     const svg = svgRef.current;
     svg.innerHTML = '';
-    
-    // Get the SVG's actual position on screen
-    const svgRect = svg.getBoundingClientRect();
+
+    const getSVGCoords = (el: HTMLElement, position: 'bottom' | 'top') => {
+      const rect = el.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = position === 'bottom' ? rect.bottom : rect.top;
+
+      const pt = svg.createSVGPoint();
+      pt.x = x;
+      pt.y = y;
+
+      const ctm = svg.getScreenCTM();
+      if (!ctm) return { x: 0, y: 0 };
+      
+      const localPt = pt.matrixTransform(ctm.inverse());
+      return { x: Math.round(localPt.x), y: Math.round(localPt.y) };
+    };
 
     const drawLink = (node: FiberNode) => {
       const parentEl = document.getElementById(`node-${node.id}`);
       if (!parentEl || !node.children) return;
 
-      const parentNodeVisual = parentEl.querySelector(':scope > .node');
+      const parentNodeVisual = parentEl.querySelector(':scope > .node') as HTMLElement;
       if (!parentNodeVisual) return;
 
-      const pRect = parentNodeVisual.getBoundingClientRect();
-      
-      // Calculate coordinates relative to the SVG container top-left
-      // We use Math.round to avoid sub-pixel shakiness
-      const pX = Math.round((pRect.left + pRect.width / 2 - svgRect.left) / zoom);
-      const pY = Math.round((pRect.bottom - svgRect.top) / zoom);
+      const pCoords = getSVGCoords(parentNodeVisual, 'bottom');
 
       node.children.forEach(child => {
         const childEl = document.getElementById(`node-${child.id}`);
         if (!childEl) return;
-        const childNodeVisual = childEl.querySelector(':scope > .node');
+        const childNodeVisual = childEl.querySelector(':scope > .node') as HTMLElement;
         if (!childNodeVisual) return;
 
-        const cRect = childNodeVisual.getBoundingClientRect();
-        const cX = Math.round((cRect.left + cRect.width / 2 - svgRect.left) / zoom);
-        const cY = Math.round((cRect.top - svgRect.top) / zoom);
+        const cCoords = getSVGCoords(childNodeVisual, 'top');
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        const cpY = (pY + cY) / 2;
-        const d = `M ${pX} ${pY} C ${pX} ${cpY}, ${cX} ${cpY}, ${cX} ${cY}`;
+        const cpY = (pCoords.y + cCoords.y) / 2;
+        const d = `M ${pCoords.x} ${pCoords.y} C ${pCoords.x} ${cpY}, ${cCoords.x} ${cpY}, ${cCoords.x} ${cCoords.y}`;
         
         path.setAttribute("d", d);
         path.setAttribute("stroke", "#94a3b8");
@@ -190,7 +196,7 @@ export default function Home() {
       });
     };
     drawLink(treeData);
-  }, [treeData, zoom]);
+  }, [treeData]);
 
   useEffect(() => {
     // Initial draw and setup resize listener
