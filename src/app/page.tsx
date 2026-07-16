@@ -371,7 +371,7 @@ export default function Home() {
                     {formData.ratio === 'unbalanced' && (
                       <div>
                         <label className="block text-xs font-semibold text-slate-500 mb-1">Unbalanced Ratio (%)</label>
-                        <select value={formData.percentage} onChange={e => setFormData({...formData, percentage: parseInt(e.target.value)})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm">
+                        <select value={formData.percentage} onChange={e => setFormData({...formData, percentage: e.target.value})} className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm">
                           {[1,2,3,4,5,6,7,8,9,10,15,20,25,30,35,40,45,50].map(p => (<option key={p} value={p}>{p < 10 ? `0${p}` : p}:{100-p}</option>))}
                         </select>
                       </div>
